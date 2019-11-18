@@ -1,19 +1,16 @@
 # README
-Branch for cleaned model codes for pyAPES development
+Skeleton of pyAPES -multi-layer soil-plant-atmosphere model.
+Original version used for simplified model: pyAPES_kersti master (v. 12.11.2019).
+
+Samuli Launiainen 12.11.2019
 
 ## Introducing clear and consistent interfaces throughout the model code
-Lower-levels provides an interface through run-function, e.g. Forestfloor is a facade/adapter of forestfloor submodels (barasoil, litter, bryophyte, snowpack) and gathers usage logic and interactions of these submodels. A facade/adapter provides an interface through run-function. 
-
 run function arguments:
 * forcing: forcing data 
 * parameters: previously calculated states
 * controls: control flags, needed parameters etc.
 
 run function returns a dict containing states and fluxes of encapsulated submodels to be used in upper-level.
-
-### Worries:
-- leaky interface (how to handle in consistent manner control parameters in lower level)
-- how to prevent dependencies across the interface, especially to down-stream: How awere lower levels should be about upper level logic? Accomadete or provide services  
 
 ## Migration to Python3
 https://docs.python.org/3.0/whatsnew/3.0.html
