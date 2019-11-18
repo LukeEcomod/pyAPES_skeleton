@@ -356,7 +356,7 @@ class PlantType(object):
         keys = ['net_co2', 'dark_respiration', 'transpiration', 'latent_heat', 'sensible_heat', 'fr',
                 'stomatal_conductance', 'boundary_conductance']
         pt_stats = {k: (np.sum(sl[k]*f1 + sh[k]*f2)) * self.dz for k in keys}
-        pt_stats['net_co2'] *= -1 # net uptake is negative 
+        # pt_stats['net_co2'] *= -1 # net uptake is negative 
         del keys
                 
         # layerwise fluxes [units per m-3] for Micromet sink-source profiles
@@ -378,8 +378,8 @@ class PlantType(object):
                 'transpiration_shaded': sh['transpiration'] * self.mask,
                 'latent_heat_sunlit': sl['latent_heat'] * self.mask,
                 'latent_heat_shaded': sh['latent_heat'] * self.mask,
-                'sensible_heat_sunlit': sl['latent_heat'] * self.mask,
-                'sensible_heat_shaded': sh['latent_heat'] * self.mask,                
+                'sensible_heat_sunlit': sl['sensible_heat'] * self.mask,
+                'sensible_heat_shaded': sh['sensible_heat'] * self.mask,                
                 'stomatal_conductance_h2o_sunlit': sl['stomatal_conductance'] * self.mask,
                 'stomatal_conductance_h2o_shaded': sh['stomatal_conductance'] * self.mask,
                 'boundary_conductance_h2o_sunlit': sl['boundary_conductance'] * self.mask,

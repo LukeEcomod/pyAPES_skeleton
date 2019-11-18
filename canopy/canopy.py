@@ -45,7 +45,7 @@ from .forestfloor.forestfloor import ForestFloor
 logger = logging.getLogger(__name__)
 
 class CanopyModel(object):
-    r""" CO2 and energy exchange inside plant canopies.
+    r""" Radiation, momentum, CO2 and energy exchange inside plant canopies.
     """
 
     def __init__(self, cpara, dz_soil):
@@ -434,19 +434,20 @@ class CanopyModel(object):
                 )
 
                 # update source terms: now do explicitly (SL 17.11.19)
-                sources['co2'] += layer_stats_i['net_co2']
+                sources['co2'] -= layer_stats_i['net_co2'] # in planttype, net uptake >0, here we want sink negative
                 sources['h2o'] += layer_stats_i['transpiration']
                 sources['sensible_heat'] += layer_stats_i['sensible_heat']
                 sources['latent_heat'] += layer_stats_i['latent_heat']
                 sources['fr'] += layer_stats_i['fr']
                 
-                # append results
-                pt_stats.append(pt_stats_i)
-                pt_layerwise.append(layer_stats_i)
-                
                 # update canopy leaf temperature; it must be lad-weighted average
                 Tleaf += layer_stats_i['leaf_temperature'] * df * pt.lad
-            
+
+                # append results
+                pt_stats.append(pt_stats_i)
+                
+                layer_stats_i['leaf_temperature'] *= pt.mask # set pt.lad=0 to np.NaN
+                pt_layerwise.append(layer_stats_i)            
             del pt, pt_stats_i, layer_stats_i
             
             # --- end of planttype -loop
@@ -703,24 +704,24 @@ class CanopyModel(object):
                     'lw_up': radiation_profiles['lw']['up']
                     })
 
-            # plant-type specific results: this is dictionary of lists where each planttype value is element in list
-            # integrated values over planttype
-            pt_results = {
-                    'root_water_potential': np.array([pt.Roots.h_root for pt in self.planttypes]),
-                    'total_transpiration': np.array([pt_st['transpiration'] * MOLAR_MASS_H2O * 1e-3 for pt_st in pt_stats]),
-                    'total_gpp': np.array([pt_st['net_co2'] + pt_st['dark_respiration'] for pt_st in pt_stats]),
-                    'total_dark_respiration': np.array([pt_st['dark_respiration'] for pt_st in pt_stats]),
-                    'total_stomatal_conductance_h2o':  np.array([pt_st['stomatal_conductance'] for pt_st in pt_stats]),
-                    'total_boundary_conductance_h2o':  np.array([pt_st['boundary_conductance'] for pt_st in pt_stats])
-                    }
+        # plant-type specific results: this is dictionary of lists where each planttype value is element in list
+        # integrated values over planttype
+        pt_results = {
+                'root_water_potential': np.array([pt.Roots.h_root for pt in self.planttypes]),
+                'total_transpiration': np.array([pt_st['transpiration'] * MOLAR_MASS_H2O * 1e-3 for pt_st in pt_stats]),
+                'total_gpp': np.array([pt_st['net_co2'] + pt_st['dark_respiration'] for pt_st in pt_stats]),
+                'total_dark_respiration': np.array([pt_st['dark_respiration'] for pt_st in pt_stats]),
+                'total_stomatal_conductance_h2o':  np.array([pt_st['stomatal_conductance'] for pt_st in pt_stats]),
+                'total_boundary_conductance_h2o':  np.array([pt_st['boundary_conductance'] for pt_st in pt_stats])
+                }
+        
+        # add vertical profiles: convert list of dicts to dict of lists and append. Love Python!
+        pt_profs = {}
+        for k,v in pt_layerwise[0].items():
+            pt_profs[k] = [x[k] for x in pt_layerwise]
             
-            # add vertical profiles: convert list of dicts to dict of lists and append. Love Python!
-            pt_profs = {}
-            for k,v in pt_layerwise[0].items():
-                pt_profs[k] = [x[k] for x in pt_layerwise]
-                
-            pt_results.update(pt_profs)
-            del pt_profs
+        pt_results.update(pt_profs)
+        del pt_profs
 
             
         return outputs_canopy, fluxes_ffloor, states_ffloor, pt_results

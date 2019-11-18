@@ -6,7 +6,7 @@ GENERAL PARAMETERS FOR RUNNING pyAPES
 gpara = {
         'dt' : 1800.0,  # timestep in forcing data file [s]
         'start_time' : "2005-06-01",  # start time of simulation [yyyy-mm-dd]
-        'end_time' : "2005-06-05",  # end time of simulation [yyyy-mm-dd]
+        'end_time' : "2005-06-03",  # end time of simulation [yyyy-mm-dd]
         'forc_filename' : "Hyde_forcing_1997_2016.csv",  # forcing data file*
         'results_directory':'results/pyAPES/',
 
@@ -84,7 +84,7 @@ gpara = {
                       # ecosystem-level fluxes (at highest gridpoint, per m-2 ground)
                       ['canopy_SH', 'sensible heat flux [W m-2]', ('date', 'simulation')],
                       ['canopy_LE', 'latent heat flux [W m-2]', ('date', 'simulation')],
-                      ['canopy_NEE', 'net ecosystem exchage [umol m-2 s-1]', ('date', 'simulation')],
+                      ['canopy_NEE', 'net ecosystem exchange [umol m-2 s-1]', ('date', 'simulation')],
                       ['canopy_GPP', 'ecosystem gross primary production [umol m-2 s-1]', ('date', 'simulation')],
                       ['canopy_Reco', 'ecosystem respiration [umol m-2 s-1]', ('date', 'simulation')],
                       ['canopy__transpiration', 'transpiration of all planttypes [m s-1]', ('date', 'simulation')],
@@ -106,7 +106,7 @@ gpara = {
                       ['pt_root_water_potential', 'root water potential [m?]', ('date', 'simulation', 'planttype')], # CHECK UNITS!!!            
 
                       # vertical profiles: lists of length 'planttype'; layers where lad == 0 are set to np.NaN
-                      ['pt_leaf_temperature', 'leaf temperature meann [degC]', ('date', 'simulation', 'planttype', 'canopy')],
+                      ['pt_leaf_temperature', 'leaf temperature mean [degC]', ('date', 'simulation', 'planttype', 'canopy')],
                       ['pt_leaf_temperature_sunlit', 'leaf temperature, sunlit leaves [degC]', ('date', 'simulation', 'planttype', 'canopy')],
                       ['pt_leaf_temperature_shaded', 'leaf temperature, shaded leaves [degC]', ('date', 'simulation', 'planttype', 'canopy')],
                       ['pt_net_co2_sunlit', 'net co2 uptake, sunlit leaves [umol m-2 (leaf) s-1]', ('date', 'simulation', 'planttype', 'canopy')],

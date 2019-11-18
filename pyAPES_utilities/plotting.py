@@ -66,7 +66,7 @@ def plot_results(results):
     plt.tight_layout(rect=(0, 0, 0.8, 1))
 
 def plot_fluxes(results, Data,
-                res_var=['canopy_net_radiation','canopy_SH','canopy_LE'],
+                res_var=['canopy_Rnet','canopy_SH','canopy_LE'],
                 Data_var=['NRAD','SH','LE'],
                 sim_idx=0, fmonth=4, lmonth=9, norain=True, dataframe=False, l1=False):
 
