@@ -4,6 +4,8 @@
 Created on Thu Aug 24 10:29:44 2017
 
 @author: ajkieloaho
+
+Parameters for ForestFloor
 """
 
 initial_conditions = {

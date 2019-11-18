@@ -7,7 +7,9 @@
 
 Describes forest floor consisting of bryophytes, baresoil and snowpack.
 
-Based on MatLab implementation by Samuli Launiainen.
+canopy.forestfloor is interface that handles inputs and outputs from 
+Bryophyte, Baresoil, Litter and Snowpack -classes that can co-exist at
+forest floor. Allows many Bryophyte -types.
 
 Note:
     migrated to python3
@@ -19,6 +21,8 @@ Note: roughness length z0 is [1/15 - 1/30] * x where x is height of element.
         There should be species specific 'effective roughness' (and also
         something that takes into account roughness of foresfloor)
 
+Todo!
+    check interface definitions and return arguments (desciptions & units!)
 
 Created on Tue Mar 13 11:59:23 2018
 """
@@ -35,7 +39,7 @@ from .heat_and_water import bryophyte_shortwave_albedo, emitted_longwave_radiati
 
 
 class ForestFloor(object):
-    r"""Describes forest floor consisting of bryophytes and/or baresoil.
+    r"""Describes forest floor consisting of bryophytes, litter and/or baresoil.
     """
 
     def __init__(self, properties, initial_temperature=None):

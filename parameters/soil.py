@@ -3,7 +3,8 @@
 Soil submodel parameters
 """
 
-""" grid and soil properties """  # (pF and conductivity from Launiainen et al.)
+""" grid and soil properties """  
+# (pF and conductivity from Launiainen et al. 2015 Hyytiala)
 
 grid = {#thickness of computational layer [m]
         'dz': [0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01,

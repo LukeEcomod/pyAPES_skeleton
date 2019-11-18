@@ -5,7 +5,8 @@
     :synopsis: APES-model component
 .. moduleauthor:: Kersti Haahti
 
-Describes plant seasonal cycle and dry leaf gas exchange.
+Describes planttype spefic processes such as dry leaf gas exchange, leaf energy
+balance, root uptake, seasonal cycle of LAI and photosynthetic capacity.
 Based on MatLab implementation by Samuli Launiainen.
 
 Created on Tue Oct 02 09:04:05 2018
@@ -14,6 +15,25 @@ Note:
     migrated to python3
     - absolute imports
 
+Changes by SL 15.11.2019:
+    - self.StomaModel set to 'MEDLYN-FARQUHAR'
+    - init works also without 'phenop'or 'laip' in case ctr['pheno_cycle'] or
+      ctr['seasonal_LAI'] == False
+    - changed output grouping and return arguments
+    - added sunlit/shaded leaves outputs
+    - source-terms for canopy.microment now updated explicitly in canopy
+
+Todo:
+    - update self.run call args documentation (radiation-related part)
+    - update self.run; get rid of photo.leaf_interface & bring parts as class functions
+        if energy_balance == True:
+            self.run_leaf_energy_balance(args)
+        else:
+            self.run_leaf_gas_exchange(args)
+    - add trunk water transport & storage (porous-media approach, tree-Richards)
+      to solve leaf water potential and transpiration limitations by water transport
+    - move water stress equations as separate def?
+    
 References:
 Launiainen, S., Katul, G.G., Lauren, A. and Kolari, P., 2015. Coupling boreal
 forest CO2, H2O and energy flows by a vertically structured forest canopy –
@@ -22,6 +42,8 @@ Soil model with separate bryophyte layer. Ecological modelling, 312, pp.385-405.
 """
 
 import numpy as np
+from copy import deepcopy
+
 from .photo import leaf_interface
 from .phenology import Photo_cycle, LAI_cycle
 from .rootzone import RootUptake
@@ -38,16 +60,21 @@ class PlantType(object):
 
         Args:
             z (array): canopy model nodes, height from soil surface (= 0.0) [m]
+            
             p (dict):
                 'name' (str): name of planttype
-                'LAImax' (float): leaf area index
-                'lad' (array): normalized leaf area density profile
+                'LAImax' (float): maximum leaf area index [m2m-2]
+                'lad' (array): normalized leaf area density profile [m2m-3]
+                
+                # following group needed only if ctr['pheno_cycle'] == True
                 'phenop' (dict): parameters for seasonal cycle of phenology
                     'Xo': initial delayed temperature [degC]
                     'fmin': minimum photocapacity [-]
                     'Tbase': base temperature [degC]
                     'tau': time constant [days]
                     'smax': threshold for full acclimation [degC]
+                
+                # following group needed only if ctr['seasonal_LAI'] == True
                 'laip' (dict): parameters for LAI seasonal dynamics
                     'lai_min': minimum LAI, fraction of annual maximum [-]
                     'lai_ini': initial LAI fraction, if None lai_ini = Lai_min * LAImax
@@ -57,34 +84,40 @@ class PlantType(object):
                     'ddur': duration of recovery period [days]
                     'sso': start doy of decrease, based on daylength [days]
                     'sdur': duration of decreasing period [days]
-                'photop' (dict): leaf gas-exchange parameters
+                
+                'photop' (dict): leaf gas-exchange and stomatal control parameters
                     'Vcmax': maximum carboxylation velocity [umolm-2s-1]
                     'Jmax': maximum rate of electron transport [umolm-2s-1]
                     'Rd': dark respiration rate [umolm-2s-1]
                     'alpha': quantum yield parameter [mol/mol]
                     'theta': co-limitation parameter of Farquhar-model
-                    'La': stomatal parameter (Lambda, m, ...) depending on model
-                    'g1':
+                    # 'm': stomatal parameter of Ball-Berry model
+                    # 'La': stomatal parameter of stomatal optimality model
+                    'g1': stomatal parameter of Medlyn A-gs model
                     'g0': residual conductance for CO2 [molm-2s-1]
-                    'kn':
+                    'kn': nitrgogen attenuation factor [-]; vertical scaling of Vcmax, Jmax, Rd
                     'beta':  co-limitation parameter of Farquhar-model
-                    'drp':
+                    'drp': drought-response parameters
                     'tresp' (dict): temperature sensitivity parameters
                         'Vcmax': [Ha, Hd, Topt]; activation energy [kJmol-1], deactivation energy [kJmol-1], optimum temperature [degC]
                         'Jmax': [Ha, Hd, Topt];
                         'Rd': [Ha]; activation energy [kJmol-1)]
+                
                 'leafp' (dict): leaf properties
                     'lt': leaf lengthscale [m]
                     'par_alb': leaf Par albedo [-]
                     'nir_alb': leaf Nir albedo [-]
                     'emi': leaf emissivity [-]
+                
                 'rootp' (dict): root zone properties
                     'root_depth': root depth [m]
                     'beta': shape parameter for root distribution model
                     'RAI_LAI_multiplier': multiplier for total fine root area index (RAI = 2*LAImax)
                     'fine_radius': fine root radius [m]
                     'radial_K': maximum bulk root membrane conductance in radial direction [s-1]
+            
             dz_soil (array): thickness of soilprofile layers, needed for rootzone [m]
+            
             ctr (dict): switches and specifications for computation
                 'WaterStress' (str): account for water stress using 'Rew', 'PsiL' or 'None'
                 'seasonal_LAI' (bool): account for seasonal LAI dynamics
@@ -108,11 +141,12 @@ class PlantType(object):
         self.Switch_pheno = ctr['pheno_cycle']  # include phenology
         self.Switch_lai = ctr['seasonal_LAI']  # seasonal LAI
         self.Switch_WaterStress = ctr['WaterStress']  # water stress affects stomata
-        self.StomaModel = 'MEDLYN_FARQUHAR' # stomatal model
+        
+        self.StomaModel = 'MEDLYN_FARQUHAR' # stomatal model; see alternatives in canopy.photo
 
         self.name = p['name']
 
-        # phenology model
+        # seasonal phenology model
         if self.Switch_pheno:
             self.Pheno_Model = Photo_cycle(p['phenop'])  # phenology model instance
             self.pheno_state = self.Pheno_Model.f  # phenology state [0...1]
@@ -135,14 +169,18 @@ class PlantType(object):
 
         # root properties
         self.Roots = RootUptake(p['rootp'], dz_soil, self.LAImax)
-
+        
+        self.mask = np.where(self.lad > 0, 1.0, np.NaN) # 1.0 where lad>0, nan elsewhere
         self.dz = z[1] - z[0]
 
         # leaf gas-exchange parameters
         self.photop0 = p['photop']   # A-gs parameters at pheno_state = 1.0 (dict)
         self.photop = self.photop0.copy()  # current A-gs parameters (dict)
+        
         # leaf properties
         self.leafp = p['leafp']  # leaf properties (dict)
+        
+        #print(self.name, self.mask)
 
     def update_daily(self, doy, T, PsiL=0.0, Rew=1.0):
         r""" Updates planttype pheno_state, gas-exchange parameters, LAI and lad.
@@ -176,10 +214,9 @@ class PlantType(object):
         self.photop['Jmax'] =  f * self.pheno_state * self.photop0['Jmax']
         self.photop['Rd'] =  f * self.pheno_state * self.photop0['Rd']
 
-        # water stress responses
+        # water stress responses: move into own sub-models?
         if self.Switch_WaterStress == 'Rew':
-            # drought responses from Hyde pine shoot chambers, 2006
-            # for 'Medlyn - model'
+            # drought responses from Hyde scots pine shoot chambers, 2006; for 'Medlyn - model' only
             b = self.photop['drp']
             fm = np.minimum(1.0, (Rew / b[0])**b[1])
             self.photop['g1'] = fm * self.photop0['g1']
@@ -191,14 +228,14 @@ class PlantType(object):
             self.photop['Rd'] *= fv
 
         if self.Switch_WaterStress == 'PsiL':
-#            PsiL = np.maximum(np.minimum(-1e-5, PsiL),-3)
             PsiL = np.minimum(-1e-5, PsiL)
             b = self.photop0['drp']
+            
             # medlyn g1-model, decrease with decreasing Psi
             self.photop['g1'] = self.photop0['g1'] * np.maximum(0.05, np.exp(b*PsiL))
 
             # Vmax and Jmax responses to leaf water potential. Kellomäki & Wang, 1996.
-            # (Huom! artikkelissa kertoimet väärinpäin, tarkistettu kuvista)
+            # (Note! mistake in paper eq's, these correspond to their figure)
             fv = 1.0 / (1.0 + (PsiL / - 2.04)**2.78)  # vcmax
             fj = 1.0 / (1.0 + (PsiL / - 1.56)**3.94)  # jmax
             fr = 1.0 / (1.0 + (PsiL / - 2.53)**6.07)  # rd
@@ -207,37 +244,25 @@ class PlantType(object):
             self.photop['Rd'] *= fr
 
     def run(self, forcing, parameters, controls):
-        r"""Computes dry leaf gas-exchange for shaded and sunlit leaves.
+        r"""Computes dry leaf gas-exchange for shaded and sunlit leaves for timestep.
 
         Args:
             forcing (dict):
-                'h2o'
-                'co2'
-                'air_temperature'
-                'air_pressure'
-                'wind_speed'
-                'nir'
-                'par'
-                'nir'
-            'parameters' (dict):
-                'sunlit_fraction'
-                'dry_leaf_fraction'
-            'controls' (dict):
-                'energy_balance'
+                'h2o' (array): water vapor mixing ratio [mol mol-1]
+                'co2' (array): carbon dioxide mixing ratio [ppm]
+                'air_temperature' (array): air temperature [degC]
+                'air_pressure' (float): ambient pressure [Pa]
+                'wind_speed' (array): mean wind speed [m s-1]
+                'par' (dict): incident and absorbed PAR [Wm-2] for sunlit & shaded leaves seprately; see structure in caller
+                'nir' (dict): --"-- for NIR
+                'lw' (dict): long-wave related inputs; see structure from caller
 
-            f_sl (array): sunlit fraction [-]
-            H2O (array): water vapor mixing ratio [mol mol-1]
-            CO2 (array): carbon dioxide mixing ratio [ppm]
-            T (array): ambient air temperature [degC]
-            U (array): mean wind speed [m s-1]
-            P: ambient pressure [Pa]
-            Q_sl1, Q_sh1 (arrays): incident PAR at sunlit and shaded leaves [Wm-2]
-            SWabs_sl, SWabs_sh (arrays): absorbed SW (PAR + NIR) at sunlit and shaded leaves [Wm-2]
-            LWl (array): leaf net long-wave radiation [Wm-2]
-            df (array): dry leaf fraction [-]
-            Ebal (bool): solve dry leaf energy balance
-            Tl_ave (array): average leaf temperature used in LW computation [degC]
-            gr (array): radiative conductance [mol m-2 s-1]
+            'parameters' (dict):
+                'sunlit_fraction': array [-]
+                'dry_leaf_fraction' (array) [-]
+
+            'controls' (dict):
+                'energy_balance' (boolean): True solves leaf temperature, False assumes Tleaf = air_temperature
         """
         df = parameters['dry_leaf_fraction']
 
@@ -270,9 +295,11 @@ class PlantType(object):
         logger_info = logger_info + ' leaftype: sunlit'
 
 
-        Qp_sl = forcing['par']['sunlit']['incident'] * PAR_TO_UMOL
+        Qp_sl = forcing['par']['sunlit']['incident'] * PAR_TO_UMOL # umolm-2s-1
         leaf_forcing.update({'par_incident': Qp_sl}) # for sunlit
-
+        
+        # --- call leaf_interface for leaf-gas exchange and optional enery balance
+        # --- returns dict
         sl = leaf_interface(
             photop=self.photop,
             leafp=self.leafp,
@@ -294,7 +321,8 @@ class PlantType(object):
 
         Qp_sh = forcing['par']['shaded']['incident'] * PAR_TO_UMOL
         leaf_forcing.update({'par_incident': Qp_sh}) # for sunlit
-
+        
+        # --- call leaf_interface for leaf-gas exchange and optional enery balance
         sh = leaf_interface(
             photop=self.photop,
             leafp=self.leafp,
@@ -304,51 +332,63 @@ class PlantType(object):
             logger_info=logger_info)
 
         if controls['energy_balance']:
-            self.Tl_sh = sh['Tl'].copy()
-            self.Tl_sl = sl['Tl'].copy()
+            self.Tl_sh = sh['leaf_temperature'].copy()
+            self.Tl_sl = sl['leaf_temperature'].copy()
 
-        # integrate water and C fluxes over all leaves in PlantType, store resuts
-        f_sl = parameters['sunlit_fraction']
-        pt_stats, layer_stats = self._integrate(sl, sh, f_sl)
+        # prepare outputs
+        pt_stats, layer_stats = self._outputs(sl, sh, parameters['sunlit_fraction'])
 
-        # --- sink/source terms
-        sources = {'h2o': layer_stats['transpiration'],  # [mol m-3 s-1]
-                   'co2': -layer_stats['net_co2'],  # [umol m-3 s-1]
-                   'sensible_heat': layer_stats['sensible_heat'],  # [W m-3]
-                   'latent_heat': layer_stats['latent_heat'],  # [W m-3]
-                   'fr': layer_stats['fr']}  # [W m-3]
+        return pt_stats, layer_stats
 
-        return pt_stats, sources
-
-    def _integrate(self, sl, sh, f_sl):
+    def _outputs(self, sl, sh, f_sl):
         """
-        integrates layerwise statistics (per unit leaf area) to plant level
-        Arg:
-            sl, sh - dict of leaf-level outputs for sunlit and shaded leaves:
-
-            x = {'An': An, 'Rd': Rd, 'E': fe, 'H': H, 'Fr': Fr, 'Tl': Tl, 'Ci': Ci,
-                 'Cs': Cs, 'gs_v': gsv, 'gs_c': gs_opt, 'gb_v': gb_v}
-        Returns:
-            y - plant level statistics
+        Combines outputs.
+        Args:
+            sl, sh (dict)
+            f_sl (array), sunlit fraction
         """
 
-        # plant fluxes, weight factors are sunlit and shaded LAI at each layer
+        # weight factors are sunlit and shaded lad
         f1 = f_sl * self.lad
         f2 = (1.0 - f_sl) * self.lad
-
+        
+        # upscale over planttype, flux per m-2 (ground)
+        keys = ['net_co2', 'dark_respiration', 'transpiration', 'latent_heat', 'sensible_heat', 'fr',
+                'stomatal_conductance', 'boundary_conductance']
+        pt_stats = {k: (np.sum(sl[k]*f1 + sh[k]*f2)) * self.dz for k in keys}
+        pt_stats['net_co2'] *= -1 # net uptake is negative 
+        del keys
+                
+        # layerwise fluxes [units per m-3] for Micromet sink-source profiles
         keys = ['net_co2', 'dark_respiration', 'transpiration', 'latent_heat', 'sensible_heat', 'fr']
-
-        pt_stats = {k: np.sum((sl[k]*f1 + sh[k]*f2) * self.dz) for k in keys}  # flux per m-2(ground)
-
-        layer_stats = {k: sl[k]*f1 + sh[k]*f2 for k in keys}  # flux per m-3
-
-        keys = ['stomatal_conductance', 'boundary_conductance','leaf_internal_co2', 'leaf_surface_co2']
-        pt_stats.update({k: np.sum((sl[k]*f1 + sh[k]*f2)) / np.sum(self.lad + EPS) for k in keys})
-
-        # leaf temperatures
-        pt_stats.update({'Tleaf': f_sl * sl['Tl'] + (1.0 - f_sl) * sh['Tl']})  # dry leaf temperature
-        pt_stats.update({'Tleaf_sl': sl['Tl'] * self.lad})
-        pt_stats.update({'Tleaf_sh': sh['Tl'] * self.lad})
-
+        layer_stats = {k: sl[k]*f1 + sh[k]*f2 for k in keys}
+        
+        # ... and outputs separately for sunlit and shaded leaves
+        layer_stats.update(
+                {
+                'leaf_temperature': (f_sl * sl['leaf_temperature']
+                + (1.0 - f_sl) * sh['leaf_temperature']),  # mean leaf temperature
+                'leaf_temperature_sunlit': sl['leaf_temperature'] * self.mask, 
+                'leaf_temperature_shaded': sh['leaf_temperature'] * self.mask,
+                'net_co2_sunlit': sl['net_co2'] * self.mask,
+                'net_co2_shaded': sh['net_co2'] * self.mask,
+                'dark_respiration_sunlit': sl['dark_respiration'] * self.mask,
+                'dark_respiration_shaded': sh['dark_respiration'] * self.mask,
+                'transpiration_sunlit': sl['transpiration'] * self.mask,
+                'transpiration_shaded': sh['transpiration'] * self.mask,
+                'latent_heat_sunlit': sl['latent_heat'] * self.mask,
+                'latent_heat_shaded': sh['latent_heat'] * self.mask,
+                'sensible_heat_sunlit': sl['latent_heat'] * self.mask,
+                'sensible_heat_shaded': sh['latent_heat'] * self.mask,                
+                'stomatal_conductance_h2o_sunlit': sl['stomatal_conductance'] * self.mask,
+                'stomatal_conductance_h2o_shaded': sh['stomatal_conductance'] * self.mask,
+                'boundary_conductance_h2o_sunlit': sl['boundary_conductance'] * self.mask,
+                'boundary_conductance_h2o_shaded': sh['boundary_conductance'] * self.mask,
+                'leaf_internal_co2_sunlit': sl['leaf_internal_co2'] * self.mask,
+                'leaf_internal_co2_shaded': sh['leaf_internal_co2'] * self.mask,
+                'leaf_surface_co2_sunlit': sl['leaf_surface_co2'] * self.mask,
+                'leaf_surface_co2_shaded': sh['leaf_surface_co2'] * self.mask
+                }
+                )
         return pt_stats, layer_stats
 

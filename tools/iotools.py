@@ -34,7 +34,8 @@ def write_ncf(nsim=None, results=None, ncf=None):
 
         if key in variables and key != 'time':
             length = np.asarray(results[key]).ndim
-
+            # if key == 'canopy_planttypes':
+            #     print(key, length, type(results[key]), results[key], np.shape(ncf[key]))
             if length > 1:
                 ncf[key][:, nsim, :] = results[key]
             elif key == 'soil_z' or key == 'canopy_z' or key == 'canopy_planttypes':

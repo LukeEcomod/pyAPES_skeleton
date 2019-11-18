@@ -17,6 +17,10 @@ Note:
 References:
 Tanaka, K., 2002. Multi-layer model of CO2 exchange in a plant community
 coupled with the water budget of leaf surfaces. Ecological Modelling, 147(1), pp.85-104.
+
+Last edit:
+Samuli Launiainen 12.11.2019: removed correction factors for rain and snow. State of Prec
+now computed based on T at highest gridpoint.
 """
 
 import numpy as np
@@ -51,8 +55,8 @@ class Interception(object):
         self.Tmin = p['Tmin']
         self.Tmax = p['Tmax']
 
-        self.c_rain = p['c_rain']
-        self.c_snow = p['c_snow']
+        #self.c_rain = p['c_rain']
+        #self.c_snow = p['c_snow']
 
         # Leaf orientation factor with respect to incident Prec (horizontal leaves -> 1)
         self.leaf_orientation = p['leaf_orientation']
@@ -137,22 +141,27 @@ class Interception(object):
         # Leaf orientation factor with respect to incident Prec (horizontal leaves -> 1)
         F = self.leaf_orientation
 
-        # --- state of precipitation (uses fW[-1] in end of code)---
+        # --- state of precipitation (based on T at highest gridpoint)---
         # fraction as water [-]
-        fW = np.ones(N)
-        ix = np.where(T < self.Tmin)
-        fW[ix] = 0.0
-        ix = np.where((T >= self.Tmin) & (T <= self.Tmax))
-        fW[ix] = (T[ix] - self.Tmin) / (self.Tmax - self.Tmin)
+        if T[-1] < self.Tmin:
+            fW = 0.0
+        else:
+            fW = np.minimum(1.0, (T[-1] - self.Tmin) / (self.Tmax - self.Tmin))
+
+#        fW = np.ones(N)
+#        ix = np.where(T < self.Tmin)
+#        fW[ix] = 0.0
+#        ix = np.where((T >= self.Tmin) & (T <= self.Tmax))
+#        fW[ix] = (T[ix] - self.Tmin) / (self.Tmax - self.Tmin)
 
         # correction of precipitation
-        Prec = Prec * fW[-1] * self.c_rain + Prec * (1 - fW[-1]) * self.c_snow
+        #Prec = Prec * fW[-1] * self.c_rain + Prec * (1 - fW[-1]) * self.c_snow
 
         # maximum interception storage capacities layerwise [m]
         Wmax = (fW * self.wmax + (1 - fW) * self.wmaxsnow) * LAIz + eps
 
 #        # boundary layer conductances for H2O and heat [mol m-2 s-1]
-#        gb_h, _, gb_v = leaf_boundary_layer_conductance(U, lt, T, 0.0, P)  # OK to assume dt = 0.0?? convergence problems otherwise
+#        gb_h, _, gb_v = leaf_boundary_layer_conductance(U, lt, T, 0.0, P)
 
         # vapor pressure deficit between leaf and air, and slope of vapor pressure curve at T
         es, s = e_sat(Tl_wet)
@@ -200,7 +209,7 @@ class Interception(object):
 
         # sensible heat flux [W m-2(wet leaf)]
         Hw = SPECIFIC_HEAT_AIR * gb_h * (Tl_wet - T)
-        # non-isothermal radiative flux [W m-2 (wet leaf)]???
+        # non-isothermal radiative flux [W m-2 (wet leaf)]
         Frw = SPECIFIC_HEAT_AIR * gr *(Tl_wet - Tl_ave)
         # evaporation rate from wet leaf [m/s] (negative for condensation)
         Ep = gb_v * Dleaf * MOLAR_MASS_H2O / WATER_DENSITY
@@ -287,8 +296,8 @@ class Interception(object):
 
         # throughfall to field layer or snowpack
         Trfall = Trfall + Unload
-        Trfall_rain = fW[-1] * Trfall  # accoording to above canopy temperature
-        Trfall_snow = (1 - fW[-1]) * Trfall
+        Trfall_rain = fW * Trfall 
+        Trfall_snow = (1 - fW) * Trfall
 
         # H20 source/sink per ground area due to evaporation and condensation [mol m-2 s-1]
         dqsource = (Evap + Cond) / dt / MOLAR_MASS_H2O * WATER_DENSITY
@@ -308,7 +317,7 @@ class Interception(object):
         # mass-balance error [m] ! self.W is old storage
         water_closure = sum(self.W) - sum(self.oldW) - (Prec * dt - sum(Evap) - sum(Cond) - (Trfall_rain + Trfall_snow))
 
-        fluxes = {'corrected_precipitation': Prec,
+        fluxes = {#'corrected_precipitation': Prec,
                   'throughfall': (Trfall_rain + Trfall_snow) / dt,
                   'throughfall_rain': Trfall_rain / dt,
                   'throughfall_snow': Trfall_snow / dt,
