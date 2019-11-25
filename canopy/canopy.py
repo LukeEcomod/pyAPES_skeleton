@@ -39,7 +39,7 @@ from .constants import MOLAR_MASS_H2O, EPS
 from .radiation import Radiation
 from .micromet import Micromet
 from .interception import Interception
-from .planttype.planttype import PlantType
+from .planttype.planttype_dev import PlantType
 from .forestfloor.forestfloor import ForestFloor
 
 logger = logging.getLogger(__name__)
@@ -398,7 +398,7 @@ class CanopyModel(object):
                     'air_pressure': forcing['air_pressure'],
                     'wind_speed': U,
                     'par': radiation_profiles['par'],
-                    'leaf_temperature': Tleaf_prev,
+                    'average_leaf_temperature': Tleaf_prev, # sl changed 25.11.
                 }
 
                 if self.Switch_Ebal:
