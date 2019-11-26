@@ -23,13 +23,11 @@ Launiainen, S., Katul, G.G., Lauren, A. and Kolari, P., 2015. Coupling boreal
 forest CO2, H2O and energy flows by a vertically structured forest canopy –
 Soil model with separate bryophyte layer. Ecological modelling, 312, pp.385-405.
 
-LAST EDITS: Samuli Launiainen 17.11.2019:
+LAST EDITS: Samuli Launiainen 26.11.2019:
     - changed output grouping and added most potential output variables
-    - commented and checked interface documentation
+    - checked interface documentations
     - changed planttype.run return arguments and computing 'sources'
-TODO:
-    - bring energy balance and leaf gas-exchange into Planttype-class functions
-    
+    - canopy.planttype modified
 """
 
 import logging
@@ -39,7 +37,7 @@ from .constants import MOLAR_MASS_H2O, EPS
 from .radiation import Radiation
 from .micromet import Micromet
 from .interception import Interception
-from .planttype.planttype_dev import PlantType
+from .planttype.planttype import PlantType
 from .forestfloor.forestfloor import ForestFloor
 
 logger = logging.getLogger(__name__)
@@ -193,26 +191,25 @@ class CanopyModel(object):
 
     def run(self, dt, forcing, parameters):
         r""" Calculates one timestep and updates state of CanopyModel object.
-
         Args:
             dt: timestep [s]
-            forcing (dataframe): meteorological and soil forcing data  !! NOT UP TO DATE
+            forcing (dict): meteorological forcing at ubc and soil state at uppermost soil layer.
                 'precipitation': precipitation rate [m s-1]
                 'air_temperature': air temperature [\ :math:`^{\circ}`\ C]
-                'dir_par': direct fotosynthetically active radiation [W m-2]
-                'dif_par': diffuse fotosynthetically active radiation [W m-2]
-                'dir_nir': direct near infrared radiation [W m-2]
-                'dif_nir': diffuse near infrare active radiation [W m-2]
-                'lw_in': Downwelling long wave radiation [W m-2]
                 'wind_speed': wind speed [m s-1]
                 'friction_velocity': friction velocity [m s-1]
                 'co2': ambient CO2 mixing ratio [ppm]
                 'h2o': ambient H2O mixing ratio [mol mol-1]
                 'air_pressure': pressure [Pa]
                 'zenith_angle': solar zenith angle [rad]
+                'PAR' (dict): with keys 'direct', 'diffuse' [Wm-2]
+                'NIR' (dict): with keys 'direct', 'diffuse' [Wm-2]
+                
                 'soil_temperature': [\ :math:`^{\circ}`\ C] properties of first soil node
                 'soil_water_potential': [m] properties of first soil node
                 'soil_volumetric_water': [m m\ :sup:`-3`\ ] properties of first soil node
+                'soil_volumetric_air': [m m\ :sup:`-3`\ ] properties of first soil node
+                'soil_pond_storage': [m] properties of first soil node
             'parameters':
                 'date'
                 'thermal_conductivity': [W m\ :sup:`-1`\  K\ :sup:`-1`\ ] properties of first soil node
@@ -487,7 +484,7 @@ class CanopyModel(object):
                 'soil_temperature': forcing['soil_temperature'],
                 'soil_water_potential': forcing['soil_water_potential'][0],  # comes in for whole rooting depth
                 'soil_volumetric_water': forcing['soil_volumetric_water'],
-                'soil_volumetric_air': forcing['soil_volumetric_water'],
+                'soil_volumetric_air': forcing['soil_volumetric_air'],
                 'soil_pond_storage': forcing['soil_pond_storage']
             }
 
