@@ -345,7 +345,7 @@ class Model(object):
         self.results = _append_results('soil', None, {'z': self.soil.grid['z']}, self.results)
 
         logger.info('Finished simulation %.0f, running time %.2f seconds' % (self.Nsim, time.time() - time0))
-
+        print(pt.name for pt in self.canopy_model.planttypes)
         return self.results
 
 

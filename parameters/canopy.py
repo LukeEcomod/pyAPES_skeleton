@@ -173,6 +173,7 @@ cpara = {'loc': loc,
          'radiation': radiation,
          'micromet': micromet,
          'interception': interception,
-         'planttypes': {'plant1': pt1, 'plant2': pt2},
+         # keys must equal name of planttype
+         'planttypes': {pt1['name']: pt1, pt2['name']: pt2},
          'forestfloor': forestfloor
          }

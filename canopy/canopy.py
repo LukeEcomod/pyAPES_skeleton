@@ -112,7 +112,7 @@ class CanopyModel(object):
                     self.Switch_WMA,
                     self.Switch_Ebal)
 
-        # --- PlantTypes ---
+        # --- PlantTypes: NOTE! keys must be same as planttype names! ---
         ptypes = []
         ptnames = list(cpara['planttypes'].keys())
         ptnames.sort()

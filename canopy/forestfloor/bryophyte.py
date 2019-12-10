@@ -45,7 +45,7 @@ class Bryophyte(object):
     r""" Represents bryophyte community-soil-atmosphere interactions.
 
     Characteristics of BryoType object are stored in 'properties' dictionary.
-    These describes physical characteristics of a bryophyte layer.
+    These describes physical & biogeochemical characteristics of a bryophyte layer.
     """
 
     # pylint: disable=too-many-instance-attributes
@@ -100,7 +100,7 @@ class Bryophyte(object):
                 initial_temperature: [\ :math:`^{\circ}`\ C]
                 initial_water_content: [g g\ :sup:`-1`\ ]
         """
-
+        # dry mass and water retention properties
         dry_mass = properties['bulk_density'] * properties['height']
         properties['dry_mass'] = dry_mass
 
@@ -113,7 +113,8 @@ class Bryophyte(object):
                           * properties['bulk_density'])
 
         saturated_water_content = field_capacity
-
+        
+        # either given explicitly or compiled from other outputs 
         if 'water_retention' not in properties:
             water_retention = {}
 
@@ -172,6 +173,7 @@ class Bryophyte(object):
                     properties['max_water_content']
                     + properties['min_water_content']) / 2.0
 
+        #: [kg m\ :sup:`-3`\]
         self.water_storage = self.water_content * properties['dry_mass']
 
         #: [m\ :sup:`3` m\ :sup:`-3`\ ]
@@ -184,7 +186,7 @@ class Bryophyte(object):
                 self.properties['water_retention'],
                 'volumetric_water')
 
-        #: [kg C m-2], 'free carbon pool'
+        #: [kg C m-2], 'free carbon pool': this part is not working yet
         self.carbon_pool = 0.0
         self.coverage = properties['ground_coverage']
 
@@ -198,7 +200,7 @@ class Bryophyte(object):
     def update(self):
         """ Updates old states to states after iteration.
         """
-
+        # SL 29.11.: are these for interation with canopy? where this is used?
         self.old_carbon_pool = self.carbon_pool
         self.old_water_content = self.water_content
         self.old_water_storage = self.water_storage
@@ -261,6 +263,7 @@ class Bryophyte(object):
             )
 
         else:
+        # calculate moss water exchange, omit energy balance
             fluxes, states = water_exchange(
                 dt=dt,
                 water_storage=self.old_water_storage,
@@ -305,8 +308,7 @@ class Bryophyte(object):
             forcing=forcing,
             parameters=parameters)
 
-        # unit conversion: 1000 kg m-2 s-1 = mm s-1
-
+        # unit conversion: 1 kg m-2 s-1 = mm s-1
         soil_evaporation = {key: value * MOLAR_MASS_H2O for key, value in soil_evaporation.items()}
 
         fluxes.update(soil_evaporation)

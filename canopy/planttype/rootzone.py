@@ -49,6 +49,7 @@ class RootUptake(object):
         self.RAI = p['RAI_LAI_multiplier']*LAImax  # total fine root area index (m2/m2)
         self.rad = self.RAI * RootDistribution(p['beta'], dz_soil, p['root_depth'])
         self.ix = np.where(np.isfinite(self.rad))
+        print(self.rad, self.ix)
         self.dz = dz_soil[self.ix]
 
         # state variables
@@ -104,7 +105,7 @@ def RootDistribution(beta, dz, root_depth):
     R = Y[1:] - Y[:-1]  # root area density distribution
 # TESTI, SET FIRST LAYER WITH NO ROOTS
     R[0] = 0.0
-
+    
     # addjust distribution to match soil profile depth
     R = R / sum(R) / dz[:len(R)]
 
