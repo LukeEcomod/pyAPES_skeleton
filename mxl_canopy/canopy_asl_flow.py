@@ -21,7 +21,7 @@ import matplotlib.pyplot as plt
 import logging
 logger = logging.getLogger(__name__)
 
-from .mxl import EPS, SPECIFIC_HEAT_AIR, VON_KARMAN, MOLECULAR_DIFFUSIVITY_CO2, \
+from mxl.mxl import EPS, SPECIFIC_HEAT_AIR, VON_KARMAN, MOLECULAR_DIFFUSIVITY_CO2, \
                        MOLECULAR_DIFFUSIVITY_H2O, THERMAL_DIFFUSIVITY_AIR, \
                        AIR_VISCOSITY, MOLAR_MASS_AIR, GRAVITY
 

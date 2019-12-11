@@ -11,7 +11,7 @@ import pandas as pd
 
 EPS = np.finfo(float)
 
-from canopy.canopy_asl_flow import Flow, mixing_length
+from mxl_canopy.canopy_asl_flow import Micromet, mixing_length
 from tools.utilities import lad_weibul
 
 #zmax = np.arange(20.0, 300, 50)
@@ -27,7 +27,7 @@ p = {'zos': 1e-3, 'dPdx': 0.0, 'Cd': 0.15, 'Utop': 3.0, 'Ubot': 0.0,
 
 
 # test 
-model = Flow(z, lad, hc, p)
+model = Micromet(z, lad, hc, p)
 plt.figure()
 res = []
 res.append([model.U.copy(), model.ust.copy(), model.z.copy()])

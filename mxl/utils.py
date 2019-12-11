@@ -61,7 +61,7 @@ def read_mxl_forcing(ffile, start_time=None, end_time=None, dt0=1800.0, dt=1800.
     rhoa = (Pdry*MAIR_DRY + h2o*MH2O) / (R*(T+NT))  # kg m-3
     Lv = 1.0e6*(2.501 - 2.361e-3*T)  # J kg-1    
     Mair = P / (R *(T+NT)) # m3 mol-1
-    print(np.mean(Mair), np.mean(rhoa))
+    #print(np.mean(Mair), np.mean(rhoa))
     
     dat['wt'] = dat.H.values / (rhoa * CP_AIR_MASS) # K m s-1
     dat['wq'] = dat.LE / (rhoa * Lv) # kg/kg m s-1

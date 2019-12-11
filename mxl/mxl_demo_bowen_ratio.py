@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-SCRIPT FOR TESTING MIXED-LAYER MODEL USING ONE DAYTIME DATA FROM HYYTIÄLÄ
+SCRIPT FOR TESTING MIXED-LAYER MODEL FOR VARIABLE BOWEN RATIO
+
 
 Created on Thu Sep 20 14:55:56 2018
 
@@ -13,63 +14,58 @@ import os
 import matplotlib.pyplot as plt
 
 # --- import constants from module mxl
-from mxl import CP_AIR_MASS, MAIR_DRY, MH2O, NT, R
+from mxl.mxl import CP_AIR_MASS, MOLAR_MASS_AIR, MOLAR_MASS_H2O, DEG_TO_KELVIN, GAS_CONSTANT, LATENT_HEAT
 # --- import model class and utility functions from module mxl
-from mxl import MXLmodel, air_density, read_forcing
+from mxl.mxl import MXLmodel
+from mxl.utils import read_mxl_forcing
+
 #import mxl # mixed-layer model
 
 EPS = np.finfo(float).eps  # machine epsilon
-LMOLAR = 44100.0  # J/mol latent heat of vaporization at 20 deg C
 
 # ---- parameters & initial conditions for mxl model
 
-wdir = 'c:\\Repositories\\mxl\\'
+wdir = r'c:\repositories\pyAPES-MXL'
 os.chdir(wdir)
 print('---- working dir: ' + os.getcwd())
 
-print('---- reading forcing ---')
 # --- read forcing for testing mxl growth
-ffile = 'forc_2010_d184_186.dat'
+print('---- reading forcing ---')
+ffile = r'forcing\FIHy_mxl_forcing_2014.dat'
 
-fday = '2010-07-03'
-lday = '2010-07-03'
+fday = '2014-07-03 08:00'
+lday = '2014-07-03 17:00'
 
 # read forcing into pd.dataframe
-dat, tvec = read_forcing(ffile)
-dat.index = tvec
+forc = read_mxl_forcing(ffile, fday, lday, 1800., 1800.)
+# we use cols 'H', 'LE', 'NEE', 'ust'
 
-# select one day and conditions when H > 0
-forc = dat.loc['2010-07-03' : '2010-07-03'][['H','E', 'NEE', 'P', 'Ta','U','ust']]
-# ix = forc['H'] < 0
-#forc['H'][ix] = 0.0
-
-# this selects periods when H >0 from forcing.
-forc = forc[forc['H'] > 0]
 
 # plot figure
 plt.figure()
 plt.plot(forc['H']); plt.ylabel('H (Wm-2)')
 
 forc['P'] = 1e2*forc['P']  # Pa
-forc['Ta'] += NT  # K
+forc['Ta'] += DEG_TO_KELVIN  # K
 
-# -- convert units of surface fluxes; first adjust H and LE with bowen ratios
-MAIR_MOLAR = (forc['P'] / (R*forc['Ta'])).values
+# -- convert units of surface fluxes
+# first divide available energy using bowen ratios 0.3 and 1.35
+MAIR_MOLAR = (forc['P'] / (GAS_CONSTANT*forc['Ta'])).values
 
 H = forc['H'].values
-LE = 1e-3*forc['E'].values * LMOLAR
+LE = forc['LE'].values
 AE = H + LE
 
 beta1 = 0.3
 le1 = AE / (beta1 + 1)
 h1 = AE - le1
-F_h2o1 = le1 / (beta1 + 1) / LMOLAR / MAIR_MOLAR *MH2O / MAIR_DRY
+F_h2o1 = le1 / (beta1 + 1) / LATENT_HEAT / MAIR_MOLAR * MOLAR_MASS_H2O / MOLAR_MASS_AIR
 F_h1 = h1 / (1.2*CP_AIR_MASS)
 
 beta2 = 1.35
 le2 = AE / (beta2 + 1)
 h2 = AE - le2
-F_h2o2 = le2 / LMOLAR / MAIR_MOLAR *MH2O / MAIR_DRY
+F_h2o2 = le2 / LATENT_HEAT / MAIR_MOLAR * MOLAR_MASS_H2O / MOLAR_MASS_AIR
 F_h2 = h2 / (1.2*CP_AIR_MASS)
 
 # originally in H Wm-2, E mmol m-2s-1, NEE umolm-2s-1, P hPa, Ta degC, u, ust ms-1

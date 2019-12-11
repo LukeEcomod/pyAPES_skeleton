@@ -34,7 +34,7 @@ import logging
 from tools.iotools import initialize_netcdf,  write_ncf
 from mxl.utils import read_mxl_forcing
 from mxl.mxl import MXLmodel
-from mxl.canopy_dev import CanopyModel
+from mxl_canopy.canopy_asl import CanopyModel
 from mxl.mxl import GAS_CONSTANT, MOLAR_MASS_H2O, MOLAR_MASS_AIR, DEG_TO_KELVIN, CP_AIR_MASS
 
 #from soil.soil import Soil
@@ -50,12 +50,12 @@ def driver(create_ncf=False, result_file=None, parametersets={}):
         parametersets (dict): parameter sets to overwrite default parameters
     """
     # --- LOGGING ---
-    from parameters.mxl_apes_parameters import logging_configuration
+    from mxl_canopy.mxl_apes_parameters import logging_configuration
     from logging.config import dictConfig
     dictConfig(logging_configuration)
 
     # --- PARAMETERS ---
-    from parameters.mxl_apes_parameters  import gpara, cpara, mxlpara, mxl_ini
+    from mxl_canopy.mxl_apes_parameters  import gpara, cpara, mxlpara, mxl_ini
 
     if parametersets == {}:
         Nsim = 1
@@ -251,6 +251,9 @@ class Model(object):
 
             # --- output results
             
+            # note! asl_profs extend from surface to z_asl and thus increase in
+            # len due canopy development. 
+            # TODO: Add option to save asl_profs to self.results and to netcdf
             canopy_state.update(canopy_flux)
             
             ffloor_state = {}

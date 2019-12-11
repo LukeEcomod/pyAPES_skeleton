@@ -8,14 +8,15 @@ Created on Thu Sep 20 14:55:56 2018
 """
 
 import numpy as np
-import pandas as pd
+#import pandas as pd
 import os
 import matplotlib.pyplot as plt
 
 # --- import constants from module mxl
-from mxl import CP_AIR_MASS, MAIR_DRY, MH2O, NT, R
+#from mxl.mxl import CP_AIR_MASS, MOLAR_MASS_AIR, MOLAR_MASS_H2O, DEG_TO_KELVIN, GAS_CONSTANT, LATENT_HEAT
 # --- import model class and utility functions from module mxl
-from mxl import MXLmodel, air_density, read_forcing
+from mxl.mxl import MXLmodel
+from mxl.utils import read_mxl_forcing
 
 #import mxl # mixed-layer model
 
@@ -27,45 +28,18 @@ wdir = r'c:\repositories\pyAPES-MXL'
 os.chdir(wdir)
 print('---- working dir: ' + os.getcwd())
 
-print('---- reading forcing ---')
 # --- read forcing for testing mxl growth
-ffile = r'forcing\forc_2010_d184_186.dat'
+print('---- reading forcing ---')
+ffile = r'forcing\FIHy_mxl_forcing_2014.dat'
 
-fday = '2010-07-03'
-lday = '2010-07-03'
+fday = '2014-07-03 08:00'
+lday = '2014-07-03 17:00'
 
 # read forcing into pd.dataframe
-dat, tvec = read_forcing(ffile)
-dat.index = tvec
-
-# select one day and conditions when H > 0
-forc = dat.loc['2010-07-03' : '2010-07-03'][['H','E', 'NEE', 'P', 'Ta','U','ust']]
-# ix = forc['H'] < 0
-#forc['H'][ix] = 0.0
-
-# this selects periods when H >0 from forcing.
-forc = forc[forc['H'] > 0]
-
-# plot figure
-plt.figure()
-plt.plot(forc['H']); plt.ylabel('H (Wm-2)')
-
-forc['P'] = 1e2*forc['P']  # Pa
-forc['Ta'] += NT  # K
-
-# -- convert units of surface fluxes: 
-# originally in H Wm-2, E mmol m-2s-1, NEE umolm-2s-1, P hPa, Ta degC, u, ust ms-1
-
-F_h = forc['H'].values / (1.2*CP_AIR_MASS)  # K ms-1, use constant air density
-MAIR_MOLAR = (forc['P'] / (R*forc['Ta'])).values
-F_h2o = 1e-3*forc['E'].values / MAIR_MOLAR *MH2O / MAIR_DRY # mmol m-2s-1 --> kg/kg ms-1
-
-F_co2 = forc['NEE'].values / MAIR_MOLAR  # ppm ms-1, <0 is sink
-
-ustar = forc['ust'].values # m s-1
+forc = read_mxl_forcing(ffile, fday, lday, 1800., 1800.)
+# we use cols 'wt', 'wq', 'wc', 'ust'
 
 # --- initialize mxl model    
-
 mxlpara = {'dt': 1800.0, # s 
            'f': 1e-4,  # s-1
            'beta': 0.2, # closure constant
@@ -96,7 +70,7 @@ run1 = MXLmodel(ini, mxlpara)
 
 print('---- running MXL-model----')
 nsteps = len(forc['H']) # len(F_h)
-tt = 30.*np.arange(0,nsteps) # time vector, min
+tt = 30.*np.arange(0, nsteps) # time vector, min
 
 # initialize results dictionany, fill with NaN's
 res = {'h': np.ones(nsteps)*np.NaN, 'theta': np.ones(nsteps)*np.NaN, 
@@ -107,7 +81,7 @@ res = {'h': np.ones(nsteps)*np.NaN, 'theta': np.ones(nsteps)*np.NaN,
 
 # run model for nsteps
 for k in range(nsteps):
-    run1.run_timestep(F_h[k], F_h2o[k], F_co2[k], ustar[k])
+    run1.run_timestep(forc['wt'][k], forc['wq'][k], forc['wc'][k], forc['ust'][k])
 
     res['h'][k] = run1.h
     res['theta'][k] = run1.theta
@@ -122,7 +96,7 @@ print('---- making graphs----')
 
 plt.figure(1)
 plt.subplot(221); plt.plot(tt, forc['H'], 'r'); plt.ylabel('H (Wm-2)')
-plt.subplot(222); plt.plot(tt, forc['E'], 'b'); plt.ylabel('E (mmol m-2)')
+plt.subplot(222); plt.plot(tt, forc['LE'], 'b'); plt.ylabel('LE (Wm-2)')
 plt.subplot(223); plt.plot(tt, forc['NEE'], 'g'); plt.ylabel('NEE (umol m-2 s-1)')
 plt.subplot(224); plt.plot(tt, forc['ust'], 'k'); plt.ylabel('ustar (m s-1)')
 
