@@ -1,70 +1,39 @@
 # README
-Skeleton of pyAPES -multi-layer soil-plant-atmosphere model.
-Original version used for simplified model: pyAPES_kersti master (v. 12.11.2019).
 
-Samuli Launiainen 12.11.2019
+pyAPES_skeleton branch 'mxl' couples pyAPES to convective mixed boundary layer slab model.
 
-## Introducing clear and consistent interfaces throughout the model code
-run function arguments:
-* forcing: forcing data 
-* parameters: previously calculated states
-* controls: control flags, needed parameters etc.
+\mxl
 
-run function returns a dict containing states and fluxes of encapsulated submodels to be used in upper-level.
+Simple implementation of Mixed Boundary Layer (MXL) model based on:
 
-## Migration to Python3
-https://docs.python.org/3.0/whatsnew/3.0.html
-Code is mainly written so that it works in both python 2.7 and 3.6 (should run versions >3.5)
-* main things:
-  - in python3, print is a function; brackets are needed
-  - iterating a list: if a index is needed use enumarate() then list(range(len(foo))) is not needed. e.g. 'for index, item in foo:' instead of 'for index in list(range(len(foo))):'
-  - iterating a dict: if you are iterating through dict.items(), dict.keys(), and dict.values() AND adding/deleting item from dict wrap it inside a list(). e.g. 'for key in list(dict.keys()): del dict[key]'.   
-  - absolute import vs. relative import: from .foo import spam if you want to import from same package.
+Janssens & Pozzer, 2015. GeoSci Model Dev. 8, 453 - 471.
+Vilà-Guerau de Arellano et al. 2015. Atmospheric Boundary Layer: Integrating Air Chemistry and Land Interactions. Cambridge University Press, New York, 2015, 265 pp
+Stull, 1998; Siqueira et al. 2009. J. Hydrometeorol. 10, 96-112.
+   
+See 'mxl_demo.py' and 'mxl_demo_bowen_ratio.py'
 
-### SoilProfile
-Water flow:
-* Equilibrium within vertical column during each timestep 
-* OR Richards 1D equation 
-! problem with infiltration (pF curves and unsaturated hydraulic conductivity)
-! description of preferential flow?
+Stand-alone from other packages
 
-Heat flow:
-* solves heat conduction
--> soil temperature and ice content 
-! neglects heat convection (heat transfer with water flow)
+Samuli Launiainen 9/2018 
 
-### Canopy
-Multilayer canopy description
-* Radiation model: canopy SW (PAR&NIR) and LW including multiple scattering in horizontally homogenous porous media Zhao & Qualls (2005, 2006), sunlit/shade leaves
-! range of zenith angle?
-* Interception model: interception of rainfall and snow following approach by Tanaka (2002, Ecol. Mod.) 
--> solves wet leaf temperature
-! restrict to snow surface level? sublimation of snow from canopy should be checked
-* Leaf gas-exchange: Photosynthesis calculated based on biochemical model of Farquhar et al. (1980) coupled with various stomatal control schemes (Medlyn, Ball-Woodrow-Berry, Hari, Katul-Vico et al.)
--> solves dry leaf temperature
-* Momentum, H2O, CO2 and T within canopy: 1st-order closure model (sources/sinks: evaporation, transpiration, photosynthesis, respiration, sensible heat etc.)
+mxl_apes.py: couples mxl-model with solution of plant canopy-asl interactions. Currently assumes soil surface state and fluxes = constant & surface layer height = 0.1 x mxl-height
 
-Forest floor and snowpack:
-* Moss cover (present during snow free periods): Interceps rainfall and evaporates interception storage, CO2 exchange (respiration and photo?)
-! capillary flux not included
-* Bare soil surface energy balance
--> solves soil surface temperature 
-* Soil respiration
-! simplified?
-* Snow model: Temperature-based snow accumulation and melt
-In future two layer energy balance snow scheme + soil freezing thawing (FEMMA)?
-		
-### Forcing
-Lettosuo (2010-2018)
-Hyytiälä (1997-2016)
-see tools/dataprocessing_scripts
+\mxl_canopy
 
-### Todos..
+Contains canopy model, simplified planttype-code and 1st order closure models for canopy-surface layer momentum & scalar budgets. 
+Leaf energy balance is solved iteratively with solution of scalar profiles throughout the asl.
+Note that dict asl_profs give momentum and scalar profiles from ground to asl top but these are not saved in outputs yet. Netcdf-writing needs to be updated.
 
-* Documentation!
-* Updating bryophyte model (energy and water)
-* Description of soil respiration? branches etc..
-* Marklund biomass functions ok for drained peatlands?
-* Feedbacks from soil to canopy
-* Parallelize model run and result writing (netCDF4) as in Climoss
-* Running sensitivity analysis easily?
+Todo:
+
+* implement intial states for MXL growth in morning
+* what happens when H < 0? Now no collapse of MXL.
+* Test mxl-growth against ABL height from ceilometer & soundings when forced by measured surface fluxes.
+
+
+
+
+
+
+
+
