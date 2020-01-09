@@ -6,7 +6,7 @@ GENERAL PARAMETERS FOR RUNNING pyAPES
 gpara = {
         'dt' : 1800.0,  # timestep in forcing data file [s]
         'start_time' : "2005-06-01",  # start time of simulation [yyyy-mm-dd]
-        'end_time' : "2005-06-03",  # end time of simulation [yyyy-mm-dd]
+        'end_time' : "2005-06-05",  # end time of simulation [yyyy-mm-dd]
         'forc_filename' : "Hyde_forcing_1997_2016.csv",  # forcing data file*
         'results_directory':'results/pyAPES/',
 

@@ -95,18 +95,22 @@ class Interception(object):
                 'energy_balance': boolean
 
         Returns:
-            df: fraction of dry leaves per layer [-]
-            Trfall_rain: throughfall as rainfall [m]
-            Trfall_snow: throughfall as snowfall [m]
-            Interc: interception [m]
-            Evap: evaporation from canopy store [m]
-            Cond: condesation [m]
-            dqsource: H2O source from each layer [mol m-2(ground) s-1]
-            dtsource: heat source from each layer [W m-2(ground)]
-            frsource: fr source [W m-2(ground)]
-            LE: latent heat flux from each layer [W m-2(ground)]
-            Tl_wet: wet leaf temperature [degC]
-            MBE: water closure [m]
+            'throughfall' (float): total throughfall [m s-1], multiply by WATER_DENSITY to get [kg m-2 s-1]
+            'throughfall_rain' (float): rain throughfall [m s-1]
+            'throughfall_snow' (float): snow throughfall [m s-1]
+            'interception' (float): [m s-1]
+            'evaporation'(float): [m s-1]
+            'condensation' (float): [m s-1]
+            'condensation_drip' (float): [m s-1]
+            'water_closure' (float): [m s-1]
+            'sources': {'h2o': dqsource,
+                        'sensible_heat': Heat / dt,
+                        'fr': Fr / dt,
+                        'latent_heat': dqsource * L},
+            'evaporation_ml' (array): evaporation/condensation rate in layers [m s-1]
+            'throughfall_ml' (array): throughfall rate in layers [m s-1]
+            'condensation_drip_ml' (array): condensation drip rate in layers [m s-1]
+
         """
         lt = np.maximum(EPS, parameters['leaf_length'])
 
@@ -331,7 +335,7 @@ class Interception(object):
                               'fr': Fr / dt,
                               'latent_heat': dqsource * L},
                   'evaporation_ml': (Evap + Cond * (1 - wf)) / dt,
-                  'throughfall_ml': Tr / dt,
+                  'throughfall_ml': Tr / dt * WATER_DENSITY,
                   'condensation_drip_ml': (Cond * wf) / dt
                   }
         return fluxes

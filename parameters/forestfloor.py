@@ -153,7 +153,9 @@ Pleurozium = {
         "porosity": 0.98,
         "photosynthesis": {
             'Amax': 1.8,  # check from Rice et al. 2011 Bryologist Table 1
-            'b': 150.  # check from Rice et al. 2011 Bryologist Table 1
+            'b': 150.0,  # check from Rice et al. 2011 Bryologist Table 1
+            'moisture_coeff': [6.4355, -14.0605, 9.1867, -0.8720],
+            'temperature_coeff': [-4.3e-5, -8.3e-4, 0.08, 0.1]
         },
         "respiration": {  # [2.0, 1.1]
             'Q10': 2.0,  # check from Rice et al. 2011 Bryologist Table 1
@@ -189,6 +191,8 @@ Hylocomium = {
         "photosynthesis": {
                 'Amax': 1.8,  # check from Rice et al. 2011 Bryologist Table 1
                 'b': 150.  # check from Rice et al. 2011 Bryologist Table 1
+                'moisture_coeff': [6.4355, -14.0605, 9.1867, -0.8720],
+                'temperature_coeff': [-4.3e-5, -8.3e-4, 0.08, 0.1]
                 },
         "respiration": { #  [2.0, 1.1]
                 'Q10': 2.0,  # check from Rice et al. 2011 Bryologist Table 1
@@ -224,6 +228,8 @@ Sphagnum = {
         "photosynthesis": {  # [4.0, 175.0],  # Amax, b (half-saturation rate)
             'Amax': 4.0,  # Sphagnum Rice et al. 2008 Am. J. Bot. Table 3
             'b': 175.  # Sphagnum Rice et al. 2008 Am. J. Bot. Table 3
+            'moisture_coeff': [6.4355, -14.0605, 9.1867, -0.8720],
+            'temperature_coeff': [-4.3e-5, -8.3e-4, 0.08, 0.1]
             },
         "respiration": {
             'Q10': 2.0,  # Rice et al. 2008 Am. J. Bot. Table 3

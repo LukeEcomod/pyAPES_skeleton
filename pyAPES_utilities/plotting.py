@@ -17,8 +17,8 @@ from pyAPES_utilities.timeseries_tools import diurnal_cycle, yearly_cumulative
 from tools.iotools import read_forcing
 from canopy.constants import LATENT_HEAT, MOLAR_MASS_H2O, MOLAR_MASS_CO2, PAR_TO_UMOL
 
-import seaborn as sns
-pal = sns.color_palette("hls", 6)
+#import seaborn as sns
+#pal = sns.color_palette("hls", 6)
 EPS = np.finfo(float).eps
 
 prop_cycle = plt.rcParams['axes.prop_cycle']

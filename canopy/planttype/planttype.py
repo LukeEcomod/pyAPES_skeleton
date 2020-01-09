@@ -42,7 +42,7 @@ Soil model with separate bryophyte layer. Ecological modelling, 312, pp.385-405.
 """
 
 import numpy as np
-from copy import deepcopy
+#from copy import deepcopy
 import logging
 logger = logging.getLogger(__name__)
 
@@ -346,9 +346,9 @@ class PlantType(object):
             Tl_ave = forcing['average_leaf_temperature'] # layer mean leaf temperature
             
             # initial guess for leaf temperature  
-            if leaftype is 'sunlit':
+            if leaftype == 'sunlit':
                 Tl_ini = self.Tl_sl
-            if leaftype is 'shaded':
+            if leaftype == 'shaded':
                 Tl_ini = self.Tl_sh
             # canopy nodes
             ic = np.where(abs(LWnet) > 0.0)

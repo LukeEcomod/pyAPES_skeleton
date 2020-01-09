@@ -17,7 +17,7 @@ Note:
 from numpy import power
 from canopy.constants import WATER_DENSITY, MOLAR_MASS_H2O, MOLAR_MASS_C, LATENT_HEAT, EPS
 from .heat_and_water import heat_and_water_exchange, water_exchange
-from .heat_and_water import convert_hydraulic_parameters, evaporation_through
+from .heat_and_water import convert_hydraulic_parameters, evaporation_through_moss
 from .carbon import soil_respiration
 
 
@@ -188,7 +188,8 @@ class Litter(object):
                 forcing=forcing,
                 parameters=parameters,
                 solver=controls['solver'],
-                nsteps=controls['nsteps']
+                nsteps=controls['nsteps'],
+                logger_info=controls['logger_info']
             )
 
         else:
@@ -227,7 +228,7 @@ class Litter(object):
 
         # compute soil evaporation through litter layer
         # [mol m-2 s-1]
-        soil_evaporation = evaporation_through(
+        soil_evaporation = evaporation_through_moss(
             properties=self.properties,
             volumetric_water=self.volumetric_water,  # old
             moss_temperature=self.temperature,  # old

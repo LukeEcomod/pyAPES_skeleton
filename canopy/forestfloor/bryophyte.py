@@ -37,7 +37,7 @@ import numpy as np
 
 from canopy.constants import WATER_DENSITY, MOLAR_MASS_H2O, MOLAR_MASS_C, LATENT_HEAT, EPS
 from .heat_and_water import heat_and_water_exchange, water_exchange
-from .heat_and_water import convert_hydraulic_parameters, evaporation_through
+from .heat_and_water import convert_hydraulic_parameters, evaporation_through_moss
 from .carbon import carbon_exchange
 
 
@@ -67,7 +67,7 @@ class Bryophyte(object):
 
         Args:
             properties (dict):
-                'ground_covarege':  [-]
+                'ground_coverage':  [-]
                 'height': [m]
                 'roughness_height': [m]
                 'leaf_area_index': [m\ :sup:`2` m :sup:`-2`\ ]
@@ -196,7 +196,7 @@ class Bryophyte(object):
         self.old_temperature = self.temperature
 
     def update(self):
-        """ Updates old states to states after iteration.
+        """ Updates old states to states after converged iteration.
         """
 
         self.old_carbon_pool = self.carbon_pool
@@ -223,7 +223,7 @@ class Bryophyte(object):
         Args:
             dt: timestep [s]
             forcing (dict):
-                'throughfall': [mm s\ :sup:`-1`\ ]
+                'throughfall': [kg m\ :sup:`-2`\ s\ :sup:`-1`\ ]
                 'par': [W m\ :sup:`-2`\ ]
                 'nir': [W m\ :sup:`-2`\ ] if energy_balance is True
                 'lw_dn': [W m\ :sup:`-2`\ ] if energy_balance is True
@@ -233,6 +233,7 @@ class Bryophyte(object):
                 'soil_temperature': [\ :math:`^{\circ}`\ C]
                 'soil_water_potential': [m]
             parameters (dict):
+                'reference_height' [m]
                 'soil_depth': [m]
                 'soil_hydraulic_conductivity': [m s\ :sup:`-1`\ ]
                 'soil_thermal_conductivity': [W m\ :sup:`-1`\  K\ :sup:`-1`\ ]
@@ -241,6 +242,7 @@ class Bryophyte(object):
                 'energy_balance': boolean
                 'solver': 'forward_euler', 'odeint'
                 'nsteps' number of steps in odesolver
+                'logger_info': str
 
         Returns:
             fluxes (dict)
@@ -248,7 +250,7 @@ class Bryophyte(object):
         """
 
         if controls['energy_balance']:
-        # calculate moss energy and water balance and new state
+            # calculate moss energy and water balance
             fluxes, states = heat_and_water_exchange(
                 properties=self.properties,
                 temperature=self.old_temperature,
@@ -257,10 +259,12 @@ class Bryophyte(object):
                 forcing=forcing,
                 parameters=parameters,
                 solver=controls['solver'],
-                nsteps=controls['nsteps']
+                nsteps=controls['nsteps'],
+                logger_info=controls['logger_info']
             )
 
         else:
+            # only water balance
             fluxes, states = water_exchange(
                 dt=dt,
                 water_storage=self.old_water_storage,
@@ -298,156 +302,16 @@ class Bryophyte(object):
         # compute soil evaporation through moss layer
 
         # [mol m-2 s-1]
-        soil_evaporation = evaporation_through(
+        soil_evaporation = evaporation_through_moss(
             properties=self.properties,
-            volumetric_water=self.volumetric_water,  # old
-            moss_temperature=self.temperature,  # old
+            volumetric_water=self.volumetric_water,  
+            moss_temperature=self.temperature,
             forcing=forcing,
             parameters=parameters)
 
-        # unit conversion: 1000 kg m-2 s-1 = mm s-1
-
+        # unit conversion from mol m-2 s-1 to kg m-2 s-1
         soil_evaporation = {key: value * MOLAR_MASS_H2O for key, value in soil_evaporation.items()}
 
         fluxes.update(soil_evaporation)
 
         return fluxes, states
-
-
-def test_bryomodel(fstep, nstep, param, forcing, odesteps=500, solver=False):
-    """ this is for testing BryoModel stand-alone
-
-    needs to access soilprofile to calculate:
-        - soil thermal conductivity
-        - soil hydraulic conductivity
-        - soil water potential
-
-    """
-
-    import pandas as pd
-    import soilprofile.soil_water as sw
-    import soilprofile.soil_heat as sh
-
-    from .heat_and_energy import saturation_vapor_pressure
-
-    columns = ['carbon_pool',
-               'hydraulic_conductivity',
-               'temperature',
-               'thermal_conductivity',
-               'volumetric_water_content',
-               'water_content',
-               'water_potential',
-               'net_radiation_balance',
-               'latent_heat_flux',
-               'sensible_heat_flux',
-               'ground_heat_flux',
-               'emitted_longwave_radiation',
-               'water_storage_change',
-               'heat_storage_change',
-               'interception',
-               'throughfall_rate',
-               'capillary_rise',
-               'water_closure',
-               'energy_closure']
-
-    bryo_results = pd.DataFrame(index=forcing.index, columns=columns)
-
-    dt = 1800.0
-
-    result_list = []
-
-    bryo = BryoModel(param)
-
-    print("Wind speed is set to be 5% of forcing value!")
-
-    pond_water_potential = 0.0  #1
-
-    for k in range(fstep, fstep + nstep):
-
-        wliq = forcing.iloc[k]['Wh']
-#        wliq = 0.8889
-
-        soil_thermal_conductivity = sh.thermal_conductivity_deVries(
-            poros=0.89,
-            wliq=wliq,
-            T=forcing.iloc[k]['Tsh'],
-            vOrg=0.11)
-
-        soil_hydraulic_conductivity = sw.hydraulic_conductivity(
-            pF={'alpha': 4.556640738735543,
-                'n': 1.3112324995868292,
-                'ThetaR': 0.074,
-                'ThetaS': 0.91},
-            x=wliq,
-            var='Th',
-            Ksat=2.42e-05)
-
-        soil_water_potential = sw.wrc(
-            pF={'alpha': 4.556640738735543,
-                'n': 1.3112324995868292,
-                'ThetaR': 0.074,
-                'ThetaS': 0.91},
-            x=wliq,
-            var='Th')
-
-        # compute H2O from relative humidity
-
-#        if 'RH' in forcing.columns:
-#            relative_humidity = forcing['RH'].iloc[k]
-#
-#        else:
-#            relative_humidity = (
-#                    forcing['h2o'].iloc[k]
-#                    * 101300.0
-#                    / saturation_vapor_pressure(forcing['Ta'].iloc[k]))
-
-#            relative_humidity = h2o * air_pressure / svp
-#            h_atm = (GAS_CONSTANT * (forc['air_temperature'] + DEG_TO_KELVIN)
-#                     * np.log(rh) / (MOLAR_MASS_H2O*GRAVITY))
-
-
-        par = forcing['diffPar'].iloc[k] + forcing['dirPar'].iloc[k]
-        nir = forcing['diffNir'].iloc[k] + forcing['dirNir'].iloc[k]
-        throughfall = forcing['Prec'].iloc[k]
-        lwdn = forcing['LWin'].iloc[k]
-        wind_speed = forcing['U'].iloc[k] * 0.05
-
-        bryo_forcing = {
-            'throughfall': throughfall,
-            'air_temperature': forcing['Ta'].iloc[k],
-            'soil_temperature': forcing['Tsh'].iloc[k],
-            'soil_water_potential': soil_water_potential,
-            'soil_depth': -0.01,
-            'soil_hydraulic_conductivity': soil_hydraulic_conductivity,
-            'soil_thermal_conductivity': soil_thermal_conductivity[0],
-            'par': par,
-            'nir': nir,
-            'lwdn': lwdn,
-            'wind_speed': wind_speed,
-            'air_pressure': 101300.0,
-            'h2o': forcing['H2O'].iloc[k],
-            'nsteps': odesteps,
-            'pond_water_potential': pond_water_potential
-            }
-
-        # compute bryophyte water, energy and carbon balances
-        bryo_flx, bryo_state = bryo.run(dt=dt,
-                                        forcing=bryo_forcing,
-                                        solver=solver)
-
-        bryo_state.update(bryo_flx)
-        result_list.append(bryo_state)
-        new_state = pd.Series(bryo_state)
-        bryo_results.iloc[k] = new_state
-
-
-#        pond_water_potential = max(pond_water_potential
-#                                - bryo_state['pond_recharge'],
-#                                0.0)
-
-    # combine results into pandas dataframe
-
-    df = pd.DataFrame.from_dict(result_list)
-    df = df.set_index(forcing.index)
-
-    return bryo_results, df
