@@ -1,36 +1,18 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-.. module: bryotype
+.. module: organiclayer
     :synopsis: APES-model component
-.. moduleauthor:: Antti-Jussi Kieloaho
+.. moduleauthor:: Antti-Jussi Kieloaho and Samuli Launiainen
 
-Bryotype describes structural and functional properties and processes of
-moss/lichen (bryophytes) species/groups at the forest bottom layer. Original
-implementation is done in MatLab by Samuli Launiainen.
+organiclayer describes structural and functional properties and processes of
+organic layer (porous media) at forest floor. It can represnt moss/lichen (bryophyte)
+species/groups at the forest bottom layer, or litter layer. 
 
-Created on Tue Mar 14 08:15:50 2017
+Created on Tue Mar 14 08:15:50 2017.
 
-TODO:
-    only water_balance calculation.
+Last edit 10.1.2020 / SL
 
-References:
-
-
-Note:
-    migrated to python3
-    - absolute imports
-    - one dictionary comprhension changed
-
-CHANGES (13.-14.7.2017 SL):
-    * BryoType: added state variables 'hydraulic_conductivity',
-        'thermal_conductivity', 'carbon_pool'
-    * changes names of some functions ('estimate_' --> 'moss_'),
-        some simplifications of scrips
-    * energy_and_water_balance: returns separate dicts 'fluxes' & 'states'
-    * arg 'time' --> 'dt' in all calls
-    * _run_timestep(args): simple entry-point to energy_and_water_balance
-        and carbon_exchange
 """
 
 import numpy as np
@@ -41,8 +23,7 @@ from canopy.constants import WATER_DENSITY, MOLAR_MASS_H2O, MOLAR_MASS_C, LATENT
                              MOLECULAR_DIFFUSIVITY_CO2, MOLECULAR_DIFFUSIVITY_H2O, \
                              THERMAL_DIFFUSIVITY_AIR, AIR_DENSITY, AIR_VISCOSITY, GRAVITY 
 
-#from .heat_and_water import convert_hydraulic_parameters, evaporation_through_moss
-from .carbon import BryophyteCarbon
+from .carbon import BryophyteCarbon, OrganicRespiration
 
 #: machine epsilon
 EPS = np.finfo(float).eps
@@ -50,74 +31,75 @@ EPS = np.finfo(float).eps
 import logging
 logger = logging.getLogger(__name__)
 
-class Bryophyte(object):
-    r""" Represents bryophyte community-soil-atmosphere interactions.
-
-    Characteristics of BryoType object are stored in 'properties' dictionary.
-    These describes physical characteristics of a bryophyte layer.
+class OrganicLayer(object):
+    r""" 
+    Universal Forestfloor Organic Object (a.k.a. combined Bryotype and Litter)
     """
 
-    # pylint: disable=too-many-instance-attributes
-    # instance attributes are necessary to functioning of BryoModel
-
-    def __init__(self, properties, initial_conditions):
-        r""" Initialises a bryophyte object by using bryophyte's properties and
-        initial states.
+    def __init__(self, properties):
+        r""" Initialises object
 
         Volumetric water content, relative water content is assumed to
         be equal to maximal retention capacity at field capacity.
 
-        Leaf area index (*LAI*) is calculated as follows
-
-        .. math::
-            LAI = 1\\mathrm{e}^{3} \\frac{m_{dry} SLA}{1\\mathrm{e}^{4}}
-
-        where :math:`m_{dry}` is dry mass and *SLA* is specific leaf area.
+#        Leaf area index (*LAI*) is calculated as follows
+#
+#        .. math::
+#            LAI = 1\\mathrm{e}^{3} \\frac{m_{dry} SLA}{1\\mathrm{e}^{4}}
+#
+#        where :math:`m_{dry}` is dry mass and *SLA* is specific leaf area.
 
         Args:
             properties (dict):
+                'name': str
+                'layer_type': 'bryophyte' or 'litter'
                 'ground_coverage':  [-]
                 'height': [m]
                 'roughness_height': [m]
-                'leaf_area_index': [m\ :sup:`2` m :sup:`-2`\ ]
-                'specific_leaf_area': [m\ :sup:`3` m :sup:`-3`\ ]
-                'dry_mass': [kg m\ :sup:`-2`]
+                #'leaf_area_index': [m\ :sup:`2` m :sup:`-2`\ ]
+                #'specific_leaf_area': [m\ :sup:`3` m :sup:`-3`\ ]
+                #'dry_mass': [kg m\ :sup:`-2`]
                 'bulk_density': [kg m\ :sup:`-3`]
+                'porosity': [m3 m-3]
                 'max_water_content': [g g\ :sup:`-1`\ ]
                 'min_water_content': [g g\ :sup:`-1`\ ]
                 'water_retention' (dict):
-                    'theta_s': saturated water content [m\ :sup:`3` m :sup:`-3`\ ]
-                    'theta_r': residual water content [m\ :sup:`3` m :sup:`-3`\ ]
+                    #'theta_s': saturated water content [m\ :sup:`3` m :sup:`-3`\ ]
+                    #'theta_r': residual water content [m\ :sup:`3` m :sup:`-3`\ ]
                     'alpha': air entry suction [cm\ :sup:`-1`]
                     'n': pore size distribution [-]
                     'saturated conductivity': [m s\ :sup:`-1`]
                     'pore connectivity': (l) [-]
-                    'compressability':
                 'porosity': [m\ :sup:`3` m\ :sup:`-3`\ ]
-                'photosynthesis' (list):
-                    0. Amax [\ :math:`\mu`\ mol m\ :sup:`-1`\ :sub:`leaf` s\ :sup:`-1`]
-                    1. b [mol mol\ :sup:`-1`]
-                'respiration' (list):
+                'photosynthesis' (dict):
+                    Amax [\ :math:`\mu`\ mol m\ :sup:`-1`\ :sub:`leaf` s\ :sup:`-1`]
+                    b [mol mol\ :sup:`-1`]
+                    temperature_coeff
+                    moisture_coeff
+                'respiration' (dict):
                     0. Q10 [-]
                     1. R10 [\ :math:`\mu`\ mol m\ :sup:`-1`\ :sub:`leaf` s\ :sup:`-1`]
                 'optical_properties' (dict):
-                    'albedo_par': [-] photosynthetically active radiation (PAR)
-                    'albedo_nir': [-] near infrared radiation (NIR)
+                    'albedo' (dict)
+                        'PAR', 'NIR'
                     'emissivity': [-]
-
-            initial_conditions (dict):
-                temperature: [\ :math:`^{\circ}`\ C]
-                water_content: [g g\ :sup:`-1`\ ]
+                'initial_conditions' (dict):
+                    temperature: [\ :math:`^{\circ}`\ C]
+                    water_content: [g g\ :sup:`-1`\ ]
         """
-
-        self.coverage = properties['ground_coverage']
+        
+        self.name = properties['name']
+        self.layer_type = properties['layer_type']
+        
+        self.coverage = properties['coverage']
         self.height = properties['height']
         self.roughness_height = properties['roughness_height']
-        self.LAI = properties['LAI']
-        self.SLA = properties['SLA']
+        #self.LAI = properties['leaf_area_index']
+        #self.SLA = properties['specific_leaf_area']
         
-        self.dry_mass = properties['dry_mass']
+        self.dry_mass = properties['bulk_density'] * properties['height']
         self.bulk_density = properties['bulk_density']
+        self.porosity = properties['porosity']
         
         # hydraulic properties
         self.max_water_content = properties['max_water_content']
@@ -144,20 +126,27 @@ class Bryophyte(object):
                 print('Bryophyte init!: water_retention parameters not consistent with max/min water contents')
             
         
-        # optical properties
+        # optical properties at full saturation
         self.optical_properties = properties['optical_properties']
-
-        # --- carbon balance model
-        self.Carbon = BryophyteCarbon(properties, carbon_pool=0.0)
         
+        # --- carbon exchange model
+        if self.layer_type == 'bryophyte':
+            # photosynthesis & respiration
+            self.Carbon = BryophyteCarbon(properties, carbon_pool=0.0)
+        
+        if self.layer_type == 'litter':
+            # only respiring
+            self.Carbon = OrganicRespiration(properties, carbon_pool=0.0)
+            
         # --- initial conditions
+        initial_conditions = properties['initial_conditions']
         
         #: [:math:`^{\circ}`\ C]
         self.temperature = initial_conditions['temperature']
         #: [g g\ :sup:`-1`\ ]
         self.water_content = min(initial_conditions['water_content'], self.max_water_content)
         
-        # kg m-2
+        # [kg m-2]
         self.water_storage = self.water_content * self.dry_mass
 
         #: [m\ :sup:`3` m\ :sup:`-3`\ ]
@@ -169,31 +158,28 @@ class Bryophyte(object):
                 self.water_retention,
                 'volumetric_water')
         
+        albedo = self.reflectance(self.water_content)
+        self.albedo = albedo
+        self.emissivity = self.optical_properties['emissivity']     
+
         #-- dict for temporal storage of object state after iteration
         self.iteration_results = None
 
     def update_state(self):
         """
-        Updates object states after converged iteration.
+        Updates object states after converged iteration. In pyAPES, called from canopy.
         """
-
-        self.carbon_pool = self.iteration_results['carbon_pool']
-        self.water_content = self.iteration_results['water_content']
+        self.temperature = self.iteration_results['temperature']
         self.water_storage = self.iteration_results['water_storage']
+        self.water_content = self.iteration_results['water_content']
         self.volumetric_water = self.iteration_results['volumetric_water']
         self.water_potential = self.iteration_results['water_potential']
-        self.temperature = self.iteration_results['temperature']
-
-#    def restore(self):
-#        """ Restores new states back to states before iteration.
-#        """
-#
-#        self.carbon_pool = self.old_carbon_pool
-#        self.water_content = self.old_water_content
-#        self.water_storage = self.old_water_storage
-#        self.volumetric_water = self.old_volumetric_water
-#        self.water_potential = self.old_water_potential
-#        self.temperature = self.old_temperature
+        
+        #self.Carbon.carbon_pool = self.iteration_results['carbon_pool']
+        
+        albedo = self.reflectance(self.water_content)
+        self.PAR_albedo = albedo['PAR']
+        self.NIR_albedo = albedo['NIR']
 
     def run(self, dt, forcing, parameters, controls):
         r""" Calculates one timestep and updates states of Bryophyte instance.
@@ -210,6 +196,7 @@ class Bryophyte(object):
                 'air_pressure': [Pa]
                 'soil_temperature': [\ :math:`^{\circ}`\ C]
                 'soil_water_potential': [m]
+                'soil_pond_storage': [kg m-2]
             parameters (dict):
                 'reference_height' [m]
                 'soil_depth': [m]
@@ -218,8 +205,6 @@ class Bryophyte(object):
                     if energy_balance is True
             controls (dict):
                 'energy_balance': boolean
-                'solver': 'forward_euler', 'odeint'
-                'nsteps' number of steps in odesolver
                 'logger_info': str
 
         Returns:
@@ -245,28 +230,32 @@ class Bryophyte(object):
                                 parameters=parameters
                                 )
                 
-        # solve carbon balance
-        cflx = self.Carbon(states['water_content'],
-                           states['temperature'],
-                           forcing['par'])
-
+        #-- solve carbon exchange
+        if self.layer_type == 'bryophyte':
+            cflx = self.Carbon.carbon_exchange(states['temperature'],
+                                               states['water_content'],
+                                               forcing['par'])
+        else: # 'litter'
+            cflx = self.Carbon.respiration(states['water_content'],
+                                           states['temperature'])           
         fluxes.update({
-            'photosynthesis_rate': cflx['photosynthesis_rate'],
-            'respiration_rate': cflx['respiration_rate'],
-            'nee': cflx['net_co2_exchange']})
+            'photosynthesis': cflx['photosynthesis'],
+            'respiration': cflx['respiration'],
+            'net_co2': cflx['net_co2']})
 
-        states['carbon_pool'] = self.carbon_pool - 1e3 * MOLAR_MASS_C * 1e-6 * cflx['net_co2_exchange']
+        # kg m-2
+        states['carbon_pool'] = self.Carbon.carbon_pool - 1e-6 * cflx['net_co2']* MOLAR_MASS_C
 
         # store iteration results
         self.iteration_results = states
         
-        # compute soil evaporation through moss layer
+        #-- compute soil evaporation through moss layer
 
         # [mol m-2 s-1]
         soil_evaporation = evaporation_through_organic_layer(
             volumetric_water=states['volumetric_water'],  
-            moss_temperature=states['temperature'],
-            moss_porosity=self.porosity,
+            temperature=states['temperature'],
+            porosity=self.porosity,
             moss_height=self.height,
             forcing=forcing,
             parameters=parameters)
@@ -282,13 +271,14 @@ class Bryophyte(object):
                                 parameters,
                                 nsteps=30,
                                 logger_info=''):
-        r""" Solves moss or litter layer water and energy balance using Forward Euler integration
+        r""" Solves organic layer coupled water and energy balance
+        by Forward Euler integration
     
         Args:
             self: object
             dt: [s], timestep
             forcing (dict):
-                'throughfall': [kg m\ :sup'-2' s\ :sup:`-1`\ ]
+                'precipitation': [kg m\ :sup'-2' s\ :sup:`-1`\ ]
                 'par': [W m\ :sup:`-2`\ ]
                 'nir': [W m\ :sup:`-2`\ ]
                 'lw_dn': [W m\ :sup:`-2`\ ]
@@ -318,7 +308,7 @@ class Bryophyte(object):
                 'evaporation' [kg m\ :sup:`-2`\ s\ :sup`-1`\]
                 'interception' [kg m\ :sup:`-2`\ s\ :sup`-1`\]            
                 'pond_recharge' [kg m\ :sup:`-2`\ s\ :sup`-1`\]
-                'capillar_rise' [kg m\ :sup:`-2`\ s\ :sup`-1`\]
+                'capillary_rise' [kg m\ :sup:`-2`\ s\ :sup`-1`\]
                 'throughfall' [kg m\ :sup:`-2`\ s\ :sup`-1`\]
                 
             states (dict):
@@ -331,18 +321,18 @@ class Bryophyte(object):
                 'thermal_conductivity': [Wm-1K-1]
         """
         
-        # array to solve subtimestep results and give initial conditions
+        # initial conditions
         u = np.zeros(11)
-        u[0] = self.temperature
-        u[0] = self.water_content * self.dry_mass
+        u[0] = self.temperature # [degC]
+        u[1] = self.water_storage # [kg m-2]
 
-        # solver output timesteps
-        tt = np.linspace(0.0, dt, nsteps)
-        sub_dt = tt[1] - tt[0]
-        
+        # subtimestep [s]
+        sub_dt = dt / nsteps
+
         # -- time loop
         t = 0.0
         while t < dt:
+            #print(t)
             # compute derivatives
             dudt = self.water_heat_tendencies(u, sub_dt, forcing, parameters)
             # integrate in time
@@ -350,7 +340,7 @@ class Bryophyte(object):
             
             # advance in time
             t = t + sub_dt
-            sub_dt = min(t-dt, sub_dt)
+            #sub_dt = min(t-dt, sub_dt)
         
         # unpack variables
         # [deg C]
@@ -427,8 +417,8 @@ class Bryophyte(object):
             'interception': interception_rate,  # [mm s-1]
             'evaporation': evaporation_rate,  # [mm s-1]
             'pond_recharge': pond_recharge_rate,  # [mm s-1]
-            'capillar_rise': capillary_rise,  # [mm s-1]
-            'throughfall': forcing['throughfall'] - interception_rate  # [mm s-1]
+            'capillary_rise': capillary_rise,  # [mm s-1]
+            'throughfall': forcing['precipitation'] - interception_rate  # [mm s-1]
             }
     
         states = {
@@ -445,12 +435,13 @@ class Bryophyte(object):
 
     def water_heat_tendencies(self, y, dt, forcing, parameters):
         """
-        Coupled water and heat balance over timestep dt. Computes tendencies and
-        fluxes
+        Solves coupled water and heat balance over timestep dt. 
+        Returns temperature and water storage tendensies and
+        water & energy fluxes.
         Args:
             y (array): initial values: returns derivatives 
                 0. temperature [degC] --> computes (du/dt)
-                1. water content [kg m-2] --> (du/dt)
+                1. water storage [kg m-2] --> (du/dt)
                 2. pond_recharge
                 3. capillary_rise
                 4. interception
@@ -461,6 +452,8 @@ class Bryophyte(object):
                 9. conducted_heat
                 10 advected_heat
             dt (float): time step
+            forcing
+            parameters
         Returns:
             derivatives (du/dt) of y.
         
@@ -485,7 +478,7 @@ class Bryophyte(object):
         # nomenclature: 
         #   water_content [g g-1], water_storage [kg m-2 s-1 == mm]
         #   volumetric water content [-], water potential [m]
-        #   all fluxes [kg m-2(bryophyte) s-1]
+        #   all fluxes [kg m-2 s-1]
 
         # initial state
         
@@ -525,7 +518,7 @@ class Bryophyte(object):
         if np.isinf(max_condensation_rate) or max_condensation_rate > 0.0:
             max_condensation_rate = 0.0
 
-        # --- compute actual evaporation/condensation rate [kg m-2 s-1] ---
+        # --- compute  evaporation/condensation rate [kg m-2 s-1] ---
 
         # boundary layer conductances for H2O, heat and CO2  [mol m-2 s-1]
         dT = y[0] - forcing['air_temperature']
@@ -558,7 +551,7 @@ class Bryophyte(object):
         max_recharge = max_recharge_rate * dt
 
         # -- recharge from rainfall interception and/or from pond storage
-        interception = min(max_recharge - EPS, forcing['throughfall'] * dt)
+        interception = min(max_recharge - EPS, forcing['precipitation'] * dt)
         
         # [kg m-2 s-1] or [mm s-1]
         interception_rate = interception / dt
@@ -576,9 +569,7 @@ class Bryophyte(object):
         
         # --- compute capillary rise from soil [ kg m-2 s-1 = mm s-1]
 
-        # estimate soil-moss hydraulic conductivity assuming two resistors in series
-        # this is same Kersti was using for heat trasport
-        
+        # Kh: soil-moss hydraulic conductivity assuming two resistors in series        
         Km = hydraulic_conductivity(water_potential, self.water_retention)
         Ks = parameters['soil_hydraulic_conductivity']
         
@@ -609,17 +600,16 @@ class Bryophyte(object):
         # radiation balance # [J m-2 s-1] or [W m-2]
         
         # [-]
-        albedo = bryophyte_shortwave_albedo(water_content,
-                                            self.optical_properties)
-        emissivity = self.optical_properties['emissivity']
+        #albedo = self.reflectivity(water_content)
+        #emissivity = self.optical_properties['emissivity']
         
         # [J m-2 s-1] or [W m-2]
-        net_shortwave_radiation = (forcing['par'] * (1.0 - albedo['PAR'])
-                                   + forcing['nir'] * (1.0 - albedo['NIR'])
+        net_shortwave_radiation = (forcing['par'] * (1.0 - self.albedo['PAR'])
+                                   + forcing['nir'] * (1.0 - self.albedo['NIR'])
                                   )
         
     
-        net_longwave_radiation = emissivity * (forcing['lw_dn']
+        net_longwave_radiation = self.emissivity * (forcing['lw_dn']
                                 - STEFAN_BOLTZMANN * (y[0] + DEG_TO_KELVIN)**4.0)
 
 
@@ -638,9 +628,10 @@ class Bryophyte(object):
         # [W m-2 K-1]
         moss_thermal_conductivity = thermal_conductivity(volumetric_water)
 
-        # thermal conductance [W m-2 K-1]; assume the layers act as two resistors in series
+        # thermal conductance [W m-2 K-1]
+        # assume the layers act as two resistors in series
         g_moss = moss_thermal_conductivity / zm
-        g_soil = self.soil_thermal_conductivity / zs
+        g_soil = parameters['soil_thermal_conductivity'] / zs
         
         thermal_conductance = (g_moss * g_soil) / (g_moss + g_soil)
         
@@ -677,7 +668,8 @@ class Bryophyte(object):
                 )
 
         new_temperature = (heat_fluxes * dt + heat_capacity_old * y[0]) / heat_capacity_new
-
+        
+        # -- tendencies
         # [K m-2 s-1]
         dudt[0] = (new_temperature - y[0]) / dt
         # [kg m-2 s-1] or [mm s-1]
@@ -709,7 +701,7 @@ class Bryophyte(object):
         Args:
             dt: [s], timestep
             forcing (dict):
-                'throughfall': [kg m\ :sup'-2' s\ :sup:`-1`\ ]
+                'precipitation': [kg m\ :sup'-2' s\ :sup:`-1`\ ]
                 'par': [W m\ :sup:`-2`\ ]
                 'nir': [W m\ :sup:`-2`\ ]
                 'lw_dn': [W m\ :sup:`-2`\ ]
@@ -743,7 +735,7 @@ class Bryophyte(object):
                 'evaporation' [kg m\ :sup:`-2`\ s\ :sup`-1`\]
                 'interception' [kg m\ :sup:`-2`\ s\ :sup`-1`\]            
                 'pond_recharge' [kg m\ :sup:`-2`\ s\ :sup`-1`\]
-                'capillar_rise' [kg m\ :sup:`-2`\ s\ :sup`-1`\]
+                'capillary_rise' [kg m\ :sup:`-2`\ s\ :sup`-1`\]
                 'throughfall' [kg m\ :sup:`-2`\ s\ :sup`-1`\]
                 
             states (dict):
@@ -837,7 +829,7 @@ class Bryophyte(object):
     
         #--- interception of rainfall and recharge from ponding water
         # [mm] or [kg m-2]
-        interception = min(max_recharge - EPS, forcing['throughfall'] * dt)
+        interception = min(max_recharge - EPS, forcing['precipitation'] * dt)
     
         # [kg m-2 s-1] or [mm s-1]
         interception_rate = interception / dt
@@ -935,9 +927,10 @@ class Bryophyte(object):
     
         fluxes = {
             'evaporation': evaporation_rate,  # [mm s-1]
-            'capillar_rise': capillary_rise,  # [mm s-1]
+            'capillary_rise': capillary_rise,  # [mm s-1]
             'pond_recharge': pond_recharge_rate,  # [mm s-1]
             'throughfall': forcing['throughfall'] - interception_rate,  # [mm s-1]
+            'interception': interception_rate,
             'ground_heat': ground_heat,  # [W m-2]
             'latent_heat': latent_heat,  # [W m-2]
             'sensible_heat': sensible_heat,  # [W m-2]
@@ -955,6 +948,41 @@ class Bryophyte(object):
     
         return fluxes, states
 
+    def reflectance(self, water_content):
+        """
+        Water-content depended bryophyte shortwave albedo [-] for PAR and NIR wavebands
+
+        The effect of water content of spectral properties are based on studies by
+        Vogelmann and Moss (1993) and Fernandes (1999)on Sphagnum cuspidatum and
+        Pleurozium schreberi, respectively.
+    
+        The albedo is scaled specific reflectance for PAR (400-700 nm) or
+        NIR (750-1400) regions. The scaling coefficient is common for both
+        PAR and NIR and scales relative to fully hydrated bryophyte albedo
+            
+        References:
+            Vogelmann and Moss (1993)
+                Remote Sensing of Environment 45:273-279.
+            Fernandes (1999)
+                PhD thesis entitled: 'Scale influences of surface
+                parametrization on modelled boreal carbon and water budgets'
+        Arg:
+            object
+            water_content [g g-1]
+        Returns (dict):
+            'PAR'
+            'NIR'
+        """
+        
+        x = water_content / self.max_water_content
+        
+        scaling_coefficient = 1.0 + (4.5 - 1.0) / (1.00 + np.power(10, 4.53 * x))
+        
+        albedo_nir = self.optical_properties['albedo']['NIR'] * scaling_coefficient
+        albedo_par = self.optical_properties['albedo']['PAR'] * scaling_coefficient
+        
+        return {'PAR': albedo_par, 'NIR': albedo_nir}
+        
 def saturation_vapor_pressure(temperature):
     r""" Calculates saturation vapor pressure over water surface.
 
@@ -1278,8 +1306,6 @@ def evaporation_through_organic_layer(volumetric_water,
     diffusion from moss canopy to 1st caluclation node in the atomosphere. The
     2nd resistance is assumed to be equal to conductance from wet moss canopy.
 
-    Method does not use state variables of BryoType instance due to iteration.
-
     Args:
         volumetric_water: [m\ :sup:`3` m\ :sup:`-3`\ ]
         temperature [degC]
@@ -1296,7 +1322,7 @@ def evaporation_through_organic_layer(volumetric_water,
             reference_height [m]    
             soil_hydraulic_conductivity: [m s\ :sup:`-1`\ ]
                 from 1st calculation node
-            soil_depth: [m] as negative value
+            soil_depth: [m]
 
     Returns:
         float:
@@ -1304,14 +1330,11 @@ def evaporation_through_organic_layer(volumetric_water,
     """
     # [mol mol-1] -> [Pa]
     h2o = forcing['h2o'] * forcing['air_pressure']
-    
     Ta = forcing['air_temperature']
     Pamb = forcing['air_pressure']
-    
     afp = porosity - volumetric_water
-    # [mol/(m2 s)]
-    # conductance for h2o "from soil surface to moss canopy height through porous media"
 
+    #-- conductance for h2o "from soil surface through porous media"
 
     # [mol m-3], air molar density
     cair = Pamb / (GAS_CONSTANT * (Ta + DEG_TO_KELVIN))
@@ -1320,7 +1343,6 @@ def evaporation_through_organic_layer(volumetric_water,
     # Millington and Quirk (1961)
     relative_diffusivity = (np.power(Ta, 1.75) * np.power(afp, 10.0/3.0) / porosity**2)
 
-    # [mol/(m2 s)], through moss depth: units: mol m-3 * m2 s-1 * m-1
     conductance_h2o = cair * MOLECULAR_DIFFUSIVITY_H2O * relative_diffusivity / moss_height
     
     atm_conductance = surface_atm_conductance(wind_speed=forcing['wind_speed'],
@@ -1328,7 +1350,7 @@ def evaporation_through_organic_layer(volumetric_water,
                                               friction_velocity=forcing['friction_velocity'],
                                               dT=temperature - Ta)
 
-    # [mol/(m2 s)], two resistors in series
+    # [mol m-2 s-1], two resistors in series
     conductance_h2o = (
         conductance_h2o * atm_conductance['h2o']
         / (conductance_h2o + atm_conductance['h2o']))
@@ -1338,24 +1360,21 @@ def evaporation_through_organic_layer(volumetric_water,
     # atmospheric evaporative demand
     evaporative_demand = (conductance_h2o
                           * (saturation_vapor_pressure(forcing['soil_temperature']) - h2o)
-                          / forcing['air_pressure'])
+                          / Ta)
 
+    #  soil supply
     # [- ]
-    rh_air = min(1.0, h2o / saturation_vapor_pressure(forcing['air_temperature']))
+    rh_air = min(1.0, h2o / saturation_vapor_pressure(Ta))
 
     # [m], in equilibrium with atmospheric relative humidity
     atm_hydraulic_head = (GAS_CONSTANT * (Ta + DEG_TO_KELVIN) * np.log(rh_air)
                         / (MOLAR_MASS_H2O * GRAVITY))
-
-    # [mol/(m2 s)]: 1e3 is water density kgm-3: 1e-3 kgm-3 / (kg/mol) x m/s = mol m-2 s-1
     evaporative_supply = max(0.0,
         WATER_DENSITY / MOLAR_MASS_H2O * parameters['soil_hydraulic_conductivity']
-        * ((atm_hydraulic_head - forcing['soil_water_potential']) / parameters['soil_depth'] - 1.0))
+        * ((atm_hydraulic_head - forcing['soil_water_potential']) / abs(parameters['soil_depth']) + 1.0))
 
-#    return {'evaporative_demand': evaporative_demand,
-#            'evaporative_supply': evaporative_supply,
-#            'soil_evaporation': min(evaporative_demand, evaporative_supply)}
     soil_evaporation =  min(evaporative_demand, evaporative_supply)
+
     return soil_evaporation
 
 def effective_saturation(value, water_retention, input_unit):
@@ -1590,159 +1609,107 @@ def hydraulic_conductivity(water_potential, water_retention, method=None):
         return saturated_conductivity * coefficient * (denominator / nominator)
 
 
-def emitted_longwave_radiation(temperature, properties=None):
-    r""" Estimates emitted longwave radiation
-
-    Args:
-        temperature (float): [W m\ :sup:`-2`]
-        properties (dict/float): properties dictionary or emissivity
-    Returns:
-        (float): [W m\ :sup:`-2`]
-    """
-    if isinstance(properties, dict):
-        emissivity = properties['optical_properties']['emissivity']
-
-    elif isinstance(properties, float):
-        emissivity = properties
-
-    else:
-        emissivity = 0.98
-
-    emitted_longwave_radiation = (
-        emissivity * STEFAN_BOLTZMANN
-        * np.power((temperature + DEG_TO_KELVIN), 4.0))
-
-    return emitted_longwave_radiation
-
-
-def bryophyte_shortwave_albedo(water_content, properties=None):
-    r""" Bryophyte albedo for PAR and NIR regions as function of water content
-
-    The effect of water content of spectral properties are based on studies by
-    Vogelmann and Moss (1993) and Fernandes (1999)on Sphagnum cuspidatum and
-    Pleurozium schreberi, respectively.
-
-    The albedo is scaled specific reflectance for PAR (400-700 nm) or
-    NIR (750-1400) regions. The scaling coefficient is common for both
-    PAR and NIR and it is based on relationship between normalized
-    reflectaces and hydration status. The species specific albedo is
-    assumed to represent a reflectance when bryophyte is in full hydration.
-
-    If bryophyte's properties are not given, estimation is based on generic
-    fit of water content against reflectances separately for PAR and NIR.
-    Fits are based on studies by Vogelmann and Moss (1993), and
-    Fernandes (1999) on Sphagnum cuspidatum and Pleurozium schreberi,
-    respectively.
-
-    References:
-        Vogelmann and Moss (1993)
-            Remote Sensing of Environment 45:273-279.
-        Fernandes (1999)
-            PhD thesis entitled: 'Scale influences of surface
-            parametrization on modelled boreal carbon and water budgets'
-
-    Args:
-        water_content (float): [g g\ :sup:`-2`]
-        max_water_content (float): [g g\ :sup:`-2`]
-
-    Returns:
-            list: reflectances
-                0. par albedo
-                1. nir albedo
-    """
-
-    if properties is None:
-
-        def reflectance(x, a, b):
-            r""" Describes relationship between water content and reflectance
-
-            Args:
-                x (float): water_content
-                a (float): fitting parameter
-                b (float): fitting parameter
-
-            Returns:
-                percentage (float)
-            """
-            return np.abs(a * np.power(x, b))
-
-        # Original reflectance in percents
-        if isinstance(water_content, float):
-            if water_content < 0.3:
-                albedo_nir = 68.41/100.0
-            else:
-                albedo_nir = reflectance(water_content, 47.66, -0.3002) / 100.0
-            albedo_par = reflectance(water_content, 8.84, -0.1303) / 100.0
-        else:
-            albedo_nir = np.empty(np.shape(water_content))
-            albedo_nir = reflectance(water_content, 47.66, -0.3002) / 100.0
-            albedo_nir[water_content < 0.3] = 68.41 / 100.0
-
-            albedo_par = reflectance(water_content, 8.84, -0.1303) / 100.0
-
-        return {'PAR': albedo_par, 'NIR': albedo_nir}
-
-    else:
-        albedo_nir = properties['optical_properties']['albedo_NIR']
-        albedo_par = properties['optical_properties']['albedo_PAR']
-        normalized_water_content = water_content / properties['max_water_content']
-
-        scaling_coefficient = 1.0 + (4.5 - 1.0) / (1.00 + np.power(10, 4.53 * normalized_water_content))
-
-        albedo_par = scaling_coefficient * albedo_par
-        albedo_nir = scaling_coefficient * albedo_nir
-
-        return {'PAR': albedo_par, 'NIR': albedo_nir}
-
-#def vapor_conductance_porous_media(volumetric_water,
-#                                   porosity,
-#                                   depth,
-#                                   temperature,
-#                                   ambient_pressure=101300.0):
-#    r""" Estimates molecular conductance of CO\ :sub:`2` and H\ :sub:`2`\ O in
-#    porous media.
-#
-#    Following asumptions are made:
-#        1. all gas exchange is due to molecular diffusion
-#        2. relative diffusvity in soil is to that of air (D/D\ :sub:`o`\ ) as
-#           described by Millington and Quirk (1961)
+#def emitted_longwave_radiation(temperature, properties=None):
+#    r""" Estimates emitted longwave radiation
 #
 #    Args:
-#        volumetric_water: [m\ :sup:`3` m\ :sup:`-3`\ ]
-#        porosity: [-]
-#        depth: Transport distance [m]
-#        ambient_pressure: [Pa]
-#
+#        temperature (float): [W m\ :sup:`-2`]
+#        properties (dict/float): properties dictionary or emissivity
 #    Returns:
-#        dictionary:
-#            molecular conductances for
-#                * 'CO2': [mol m\ :sup:`-2` s\ :sup:`-1`\ ]
-#                * 'H2O': [mol m\ :sup:`-2` s\ :sup:`-1`\ ]
+#        (float): [W m\ :sup:`-2`]
+#    """
+#    if isinstance(properties, dict):
+#        emissivity = properties['optical_properties']['emissivity']
+#
+#    elif isinstance(properties, float):
+#        emissivity = properties
+#
+#    else:
+#        emissivity = 0.98
+#
+#    emitted_longwave_radiation = (
+#        emissivity * STEFAN_BOLTZMANN
+#        * np.power((temperature + DEG_TO_KELVIN), 4.0))
+#
+#    return emitted_longwave_radiation
+
+
+#def bryophyte_shortwave_albedo(water_content, properties=None):
+#    r""" Bryophyte albedo for PAR and NIR regions as function of water content
+#
+#    The effect of water content of spectral properties are based on studies by
+#    Vogelmann and Moss (1993) and Fernandes (1999)on Sphagnum cuspidatum and
+#    Pleurozium schreberi, respectively.
+#
+#    The albedo is scaled specific reflectance for PAR (400-700 nm) or
+#    NIR (750-1400) regions. The scaling coefficient is common for both
+#    PAR and NIR and it is based on relationship between normalized
+#    reflectaces and hydration status. The species specific albedo is
+#    assumed to represent a reflectance when bryophyte is in full hydration.
+#
+#    If bryophyte's properties are not given, estimation is based on generic
+#    fit of water content against reflectances separately for PAR and NIR.
+#    Fits are based on studies by Vogelmann and Moss (1993), and
+#    Fernandes (1999) on Sphagnum cuspidatum and Pleurozium schreberi,
+#    respectively.
+#
+#    References:
+#        Vogelmann and Moss (1993)
+#            Remote Sensing of Environment 45:273-279.
+#        Fernandes (1999)
+#            PhD thesis entitled: 'Scale influences of surface
+#            parametrization on modelled boreal carbon and water budgets'
+#
+#    Args:
+#        water_content (float): [g g\ :sup:`-2`]
+#        max_water_content (float): [g g\ :sup:`-2`]
+#
+#    Returns (dict)
 #    """
 #
-#    # [K]
-#    temperature = temperature + DEG_TO_KELVIN
+#    if properties is None:
 #
-#    # [m3/m3], air filled porosity
-#    afp = np.maximum(0.0, porosity - volumetric_water)
-#    # afp = max(0, porosity - volumetric_water)
+#        def reflectance(x, a, b):
+#            r""" Describes relationship between water content and reflectance
 #
-#    # [mol m-3], air molar density
-#    cair = ambient_pressure / (GAS_CONSTANT * temperature)
+#            Args:
+#                x (float): water_content
+#                a (float): fitting parameter
+#                b (float): fitting parameter
 #
-#    # D/Do, diffusivity in porous media relative to that in free air,
-#    # Millington and Quirk (1961)
-#    relative_diffusivity = (np.power((temperature / DEG_TO_KELVIN), 1.75)
-#                            * np.power(afp, 10.0/3.0) / porosity**2)
+#            Returns:
+#                percentage (float)
+#            """
+#            return np.abs(a * np.power(x, b))
 #
-#    # [mol/(m2 s)], through moss depth: units: mol m-3 * m2 s-1 * m-1
-#    conductance_h2o = cair * MOLECULAR_DIFFUSIVITY_H2O * relative_diffusivity / depth
-#    conductance_co2 = cair * MOLECULAR_DIFFUSIVITY_CO2 * relative_diffusivity / depth
+#        # Original reflectance in percents
+#        if isinstance(water_content, float):
+#            if water_content < 0.3:
+#                albedo_nir = 68.41/100.0
+#            else:
+#                albedo_nir = reflectance(water_content, 47.66, -0.3002) / 100.0
+#            albedo_par = reflectance(water_content, 8.84, -0.1303) / 100.0
+#        else:
+#            albedo_nir = np.empty(np.shape(water_content))
+#            albedo_nir = reflectance(water_content, 47.66, -0.3002) / 100.0
+#            albedo_nir[water_content < 0.3] = 68.41 / 100.0
 #
-#    return {
-#        'co2': conductance_co2,
-#        'h2o': conductance_h2o
-#        }
+#            albedo_par = reflectance(water_content, 8.84, -0.1303) / 100.0
+#
+#        return {'PAR': albedo_par, 'NIR': albedo_nir}
+#
+#    else:
+#        albedo_nir = properties['optical_properties']['albedo_NIR']
+#        albedo_par = properties['optical_properties']['albedo_PAR']
+#        normalized_water_content = water_content / properties['max_water_content']
+#
+#        scaling_coefficient = 1.0 + (4.5 - 1.0) / (1.00 + np.power(10, 4.53 * normalized_water_content))
+#
+#        albedo_par = scaling_coefficient * albedo_par
+#        albedo_nir = scaling_coefficient * albedo_nir
+#
+#        return {'PAR': albedo_par, 'NIR': albedo_nir}
+
 
 
 #def capillary_rise(dt,

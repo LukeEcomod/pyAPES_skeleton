@@ -16,15 +16,14 @@ import numpy as np
 from canopy.constants import EPS
 
 class BryophyteCarbon(object):
+    r"""Bryophyte photosynthesis and respiration using simple light-response
+        Gives fluxes per unit ground area.
+    """
     def __init__(self, para, carbon_pool=0):
-        if 'photosynthesis' in para:
-            self.amax = para['photosynthesis']['amax']
-            self.b = para['photosynthesis']['b']
-            self.moisture_coeff = para['photosynthesis']['moisture_coeff']
-            self.temperature_coeff = para['photosynthesis']['temperature_coeff']
-        else:
-            self.amax = 0.0
-            self.b = EPS
+        self.amax = para['photosynthesis']['amax']
+        self.b = para['photosynthesis']['b']
+        self.moisture_coeff = para['photosynthesis']['moisture_coeff']
+        self.temperature_coeff = para['photosynthesis']['temperature_coeff']
         
         self.r10 = para['respiration']['r10']
         self.q10 = para['respiration']['q10']
@@ -33,8 +32,8 @@ class BryophyteCarbon(object):
         self.carbon_pool = carbon_pool
         
     def carbon_exchange(self,
-                        water_content,
                         temperature,
+                        water_content,
                         incident_par):
         r""" Estimates photosynthesis and respiration rates of bryophyte layer.
     
@@ -72,6 +71,8 @@ class BryophyteCarbon(object):
                   [\ :math:`\mu`\ mol m\ :sup:`-2`:sub:`ground` s\ :sup:`-1`\ ]
                 * 'respiration_rate':
                   [\ :math:`\mu`\ mol m\ :sup:`-2`:sub:`ground` s\ :sup:`-1`\ ]
+                 * 'co_flux': net co2 exchange, <0 uptake
+                  [\ :math:`\mu`\ mol m\ :sup:`-2`:sub:`ground` s\ :sup:`-1`\ ]                 
         """
         # check inputs
         # [umol/(m2 s)]
@@ -117,57 +118,91 @@ class BryophyteCarbon(object):
         # effect of water content is in the range 0.01 to 1.0
         water_modifier_respiration = np.maximum(0.01, np.minimum(1.0, water_modifier_respiration))
     
-        # r = r10 * Q10^((T-10) / 10) [umol/(m2 s)]
+        # r = r10 * Q10^((T-10) / 10) [umol m-2 s-1]
         respiration_rate = (
             self.r10 * self.q10**((temperature - 10.0) / 10.0) * water_modifier_respiration
             )
     
-
+        # umol m-2 (ground) s-1
         return {
-            'photosynthesis_rate': photosynthetic_rate,
-            'respiration_rate': respiration_rate,
-            'net_co2_flux': -photosynthetic_rate + respiration_rate
+            'photosynthesis': photosynthetic_rate,
+            'respiration': respiration_rate,
+            'net_co2': -photosynthetic_rate + respiration_rate
             }
 
-
-
-def soil_respiration(properties, Ts, Wliq, Wair):
-    """ Soil respiration beneath forestfloor
-
-    Heterotrophic and autotrophic respiration rate (CO2-flux) based on
-    Pumpanen et al. (2003) Soil.Sci.Soc.Am
-
-    Restricts respiration by soil moisuture as in
-    Skopp et al. (1990), Soil.Sci.Soc.Am
-
-    Args:
-        properties (dict):
-            'R10'
-            'Q10'
-            'poros'
-            'limitpara'
-        Ts - soil temperature [degC]
-        Wliq - soil vol. moisture content [m3 m-3]
-    Returns:
-        rsoil - soil respiration rate [umol m-2 s-1]
-        fm - relative modifier (Skopp et al.)
+class OrganicRespiration():
+    """ 
+    Litter layer respiration. Values per unit ground area
     """
-    # Skopp limitparam [a,b,d,g] for two soil types
-    # sp = {'Yolo':[3.83, 4.43, 1.25, 0.854],
-    #       'Valentine': [1.65,6.15,0.385,1.03]}
+    def __init__(self, para, carbon_pool=0.0):
+        self.r10 = para['respiration']['r10']
+        self.q10 = para['respiration']['q10']
+        #self.moisture_coeff = para['respiration']['moisture_coeff']
+        self.carbon_pool = 0.0
+        
+    def respiration(self, temperature, volumetric_water):
+        """
+        respiration rate [umol m-2 (ground) s-1]
+        """
+        r = self.r10 * np.power(self.q10, (temperature - 10.0) / 10.0)
+        
+        # add moisture response
+        fW = 1.0        
+        r = r * fW
+        return {'photosynthesis': 0.0, 'respiration': r,
+                'net_co2': r
+               }
 
-    limitpara = properties['limitpara']
-    r10 = properties['R10']
-    q10 = properties['Q10']
 
-    # unrestricted respiration rate
-    base_respiration = r10 * np.power(q10, (Ts - 10.0) / 10.0)
+class SoilRespiration():
+    """
+    Soil respiration
+    """
+    def __init__(self, para, weights=1):
+        # base rate [umol m-2 s-1] and temperature sensitivity [-]
+        self.r10 = para['r10']
+        self.q10 = para['q10']
+        
+        # moisture response of Skopp et al. 1990
+        self.moisture_coeff = para['moisture_coeff']
+        
+        if weights is not None:
+            # soil respiration computed in layers and weighted
+            self.weights = weights
+            self.Nlayers = len(weights)
 
-    # moisture response (substrate diffusion, oxygen limitation)
-    modifier = np.minimum(limitpara[0] * Wliq**limitpara[2],
-                          limitpara[1] * Wair**limitpara[3])  # ]0...1]
-    modifier = np.minimum(modifier, 1.0)
+    def respiration(self, soil_temperature, volumetric_water, volumetric_air):
+        """ Soil respiration beneath forestfloor
+    
+        Heterotrophic and autotrophic respiration rate (CO2-flux) based on
+        Pumpanen et al. (2003) Soil.Sci.Soc.Am
+    
+        Restricts respiration by soil moisuture as in
+        Skopp et al. (1990), Soil.Sci.Soc.Am
+    
+        Args:
+            
+            Ts - soil temperature [degC]
+            Wliq - soil vol. moisture content [m3 m-3]
+        Returns:
+            soil respiration rate [umol m-2 s-1]
 
-    respiration = base_respiration * modifier
-
-    return respiration
+        """
+        # Skopp limitparam [a,b,d,g] for two soil types
+        # sp = {'Yolo':[3.83, 4.43, 1.25, 0.854],
+        #       'Valentine': [1.65,6.15,0.385,1.03]}
+    
+        # unrestricted respiration rate
+        x = self.r10 * np.power(self.q10, (soil_temperature - 10.0) / 10.0)
+    
+        # moisture response (substrate diffusion, oxygen limitation)
+        f = np.minimum(self.moisture_coeff[0] * volumetric_water**self.moisture_coeff[2],
+                       self.moisture_coeff[1] * volumetric_air**self.moisture_coeff[3])
+        f = np.minimum(f, 1.0)
+        
+        respiration = x * f
+        
+        if hasattr(self, 'weights'):
+            respiration = sum(self.weights * respiration[0:self.Nlayers])
+    
+        return respiration

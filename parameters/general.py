@@ -69,17 +69,17 @@ gpara = {
                       ['canopy_LW_up', 'upward LW [W m-2]', ('date', 'simulation', 'canopy')],
                       
                       # interception sub-model results
-                      ['canopy_interception', 'canopy interception [m s-1]', ('date', 'simulation')],
-                      ['canopy_interception_storage', 'canopy interception storage [m]', ('date', 'simulation')],
-                      ['canopy_evaporation', 'evaporation from interception storage [m s-1]', ('date', 'simulation')],
-                      ['canopy_condensation', 'condensation to canopy interception storage [m s-1]', ('date', 'simulation')],
-                      ['canopy_condensation_drip', 'condensation to canopy that drips [m s-1]', ('date', 'simulation')],
-                      ['canopy_transpiration','transpiration [m s-1]', ('date', 'simulation')],
-                      ['canopy_throughfall', 'throughfall to moss or snow [m s-1]', ('date', 'simulation')],
-                      ['canopy_evaporation_ml', 'evaporation from interception storage, profile (condensation incl.) [m s-1]', ('date', 'simulation', 'canopy')],
-                      ['canopy_throughfall_ml', 'throughfall within canopy, profile [m s-1]', ('date', 'simulation', 'canopy')],
-                      ['canopy_condensation_drip_ml', 'condensation drip within canopy, profile [m s-1]', ('date', 'simulation', 'canopy')],
-                      ['canopy_water_closure', 'interception model mass balance error [m s-1]', ('date', 'simulation')],
+                      ['canopy_interception', 'canopy interception [kg m-2 s-1]', ('date', 'simulation')],
+                      ['canopy_interception_storage', 'canopy interception storage [kg m-2]', ('date', 'simulation')],
+                      ['canopy_evaporation', 'evaporation from interception storage [kg m-2 s-1]', ('date', 'simulation')],
+                      ['canopy_condensation', 'condensation to canopy interception storage [kg m-2 s-1]', ('date', 'simulation')],
+                      ['canopy_condensation_drip', 'condensation to canopy that drips [kg m-2 s-1]', ('date', 'simulation')],
+                      ['canopy_transpiration','transpiration [kg m-2 s-1]', ('date', 'simulation')],
+                      ['canopy_throughfall', 'throughfall to moss or snow [kg m-2 s-1]', ('date', 'simulation')],
+                      ['canopy_evaporation_ml', 'evaporation from interception storage, profile (condensation incl.) [kg m-2 s-1]', ('date', 'simulation', 'canopy')],
+                      ['canopy_throughfall_ml', 'throughfall within canopy, profile [kg m-2 s-1]', ('date', 'simulation', 'canopy')],
+                      ['canopy_condensation_drip_ml', 'condensation drip within canopy, profile [kg m-2 s-1]', ('date', 'simulation', 'canopy')],
+                      ['canopy_water_closure', 'interception model mass balance error [kg m-2 s-1]', ('date', 'simulation')],
 
                       # ecosystem-level fluxes (at highest gridpoint, per m-2 ground)
                       ['canopy_SH', 'sensible heat flux [W m-2]', ('date', 'simulation')],
@@ -100,7 +100,7 @@ gpara = {
                       # planttype -specific outputs: lists of length 'planttype'
                       ['pt_total_gpp', 'gross-primary productivity [umol m-2 s-1]', ('date', 'simulation', 'planttype')],
                       ['pt_total_dark_respiration', 'dark (or leaf + wood?) respiration [umol m-2 s-1]', ('date', 'simulation', 'planttype')],
-                      ['pt_total_transpiration', 'transpiration [ms-1]', ('date', 'simulation', 'planttype')],                     
+                      ['pt_total_transpiration', 'transpiration [kg m-2 s-1]', ('date', 'simulation', 'planttype')],                     
                       ['pt_total_stomatal_conductance_h2o', 'stomatal conductance for H2O [mol m-2 s-1]', ('date', 'simulation', 'planttype')],   
                       ['pt_total_boundary_conductance_h2o', 'leaf boundary layer conductance for H2O [mol m-2 s-1]', ('date', 'simulation', 'planttype')],
                       ['pt_root_water_potential', 'root water potential [m?]', ('date', 'simulation', 'planttype')], # CHECK UNITS!!!            
@@ -147,32 +147,61 @@ gpara = {
                       ['soil_energy_closure', 'soil heat balance error [W m-2]', ('date', 'simulation')],
  
                       # forest floor outputs
-                      ['ffloor_potential_infiltration', 'potential infiltration to soil [m s-1]', ('date', 'simulation')],
-                      ['ffloor_snow_water_equivalent', 'snow water equivalent [m]', ('date', 'simulation')],
-                      ['ffloor_ground_heat', 'ground heat flux (forest floor) [W m-2]', ('date', 'simulation')],
+                      ['ffloor_net_radiation', 'net radiation (forest floor) [W m-2]', ('date', 'simulation')],                      
                       ['ffloor_sensible_heat', 'sensible heat flux (forest floor) [W m-2]', ('date', 'simulation')],
                       ['ffloor_latent_heat', 'latent heat flux (forest floor) [W m-2]', ('date', 'simulation')],
-                      ['ffloor_snow_water_closure', "water balance error (snowcover) [m s-1]", ('date', 'simulation')],
-                      ['ffloor_bryo_water_closure', "water balance error (bryophytes) [m s-1]", ('date', 'simulation')],
-                      ['ffloor_bryo_energy_closure', "energy balance error (bryophytes) [W m-2]", ('date', 'simulation')],
-                      ['ffloor_soil_energy_closure', "energy balance error (soil) [W m-2]", ('date', 'simulation')],
-                      ['ffloor_bryo_carbon_pool', 'carbon pool (bryophyte) [kg C m-2]', ('date', 'simulation')],
-                      ['ffloor_bryo_photosynthesis', 'photosynthesis rate (bryophyte) [umol m-2(ground) s-1]', ('date', 'simulation')],
-                      ['ffloor_bryo_respiration', 'respiration rate (bryophyte) [umol m-2(ground) s-1]', ('date', 'simulation')],
-                      ['ffloor_litter_respiration', 'respiration rate (litter) [umol m-2(ground) s-1]', ('date', 'simulation')],
-                      ['ffloor_respiration', 'respiration rate [umol m-2(ground) s-1]', ('date', 'simulation')],
-                      ['ffloor_evaporation', 'evaporation (forest floor) [m s-1]', ('date', 'simulation')],
-                      ['ffloor_evaporation_bryo', 'evaporation (bryophytes) [m s-1]', ('date', 'simulation')],
-                      ['ffloor_evaporation_litter', 'evaporation (litter) [m s-1]', ('date', 'simulation')],
-                      ['ffloor_evaporation_soil', 'evaporation (soil) [m s-1]', ('date', 'simulation')],
-                      ['ffloor_temperature', 'temperature (forest floor) [degC]', ('date', 'simulation')],
-                      ['ffloor_litter_temperature', 'temperature (litter) [degC]', ('date', 'simulation')],
-                      ['ffloor_bryo_temperature', 'temperature (bryophyte) [degC]', ('date', 'simulation')],
-                      ['ffloor_soil_temperature', 'temperature (soil) [degC]', ('date', 'simulation')],
-                      ['ffloor_bryo_water_storage', 'water storage (bryophytes) [kg m-2]', ('date', 'simulation')],
-                      ['ffloor_litter_water_storage', 'water storage (litter) [kg m-2]', ('date', 'simulation')],
-                      ['ffloor_capillar_rise', 'capillary rise to bryophyte layer [m s-1]', ('date', 'simulation')],
-                      ]}
+                      ['ffloor_ground_heat', 'ground heat flux (forest floor) [W m-2]', ('date', 'simulation')],
+                      ['ffloor_energy_closure', "energy balance error (forest floor) [W m-2]", ('date', 'simulation')],
+
+                      ['ffloor_evaporation', 'evaporation (forest floor) [kg m-2 s-1]', ('date', 'simulation')],                      
+                      ['ffloor_soil_evaporation', 'evaporation (soil) [kg m-2 s-1]', ('date', 'simulation')],                      
+                      ['ffloor_potential_infiltration', 'potential infiltration (forest floor)) [kg m-2 s-1]', ('date', 'simulation')],
+                      ['ffloor_interception', 'interception rate (forest floor) [kg m-2 s-1]', ('date', 'simulation')],
+                      ['ffloor_capillary_rise', 'capillary rise (forest floor) [kg m-2 s-1]', ('date', 'simulation')],
+                      ['ffloor_pond_recharge', 'recharge from pond storage (forest floor) [kg m-2 s-1]', ('date', 'simulation')],                      
+                      ['ffloor_water_closure', "water balance error (forest floor) [kg m-2 s-1]", ('date', 'simulation')],
+                      
+                      ['ffloor_net_co2', 'net co2 flux (forest floor) [umol m-2(ground) s-1]', ('date', 'simulation')],                      
+                      ['ffloor_photosynthesis', 'photosynthesis rate (forest floor) [umol m-2(ground) s-1]', ('date', 'simulation')],    
+                      ['ffloor_respiration', 'respiration rate (forest floor) [umol m-2(ground) s-1]', ('date', 'simulation')],
+                      ['ffloor_soil_respiration', 'soil respiration rate (below forest floor) [umol m-2(ground) s-1]', ('date', 'simulation')],
+
+                      ['ffloor_temperature', 'temperature (forest floor) [deg C]', ('date', 'simulation')],
+                      ['ffloor_water_storage', 'water storage (forest floor) [kg m-2]', ('date', 'simulation')],
+                      ['ffloor_snow_water_equivalent', 'snow water equivalent (forest floor) [kg m-2]', ('date', 'simulation')],
+                      ['ffloor_par_albedo', 'PAR albedo (forest floor) [-]', ('date', 'simulation')],                                  
+                      ['ffloor_nir_albedo', 'NIR albedo (forest floor) [-]', ('date', 'simulation')],   
+                      ['ffloor_groundtypes', 'forestfloor groundtype names', ('groundtype')],
+                      
+                      # ground-type specific outputs
+                      ['gt_net_radiation', 'net radiation [W m-2]', ('date', 'simulation', 'groundtype')],                      
+                      ['gt_sensible_heat', 'sensible heat flux [W m-2]', ('date', 'simulation', 'groundtype')],
+                      ['gt_latent_heat', 'latent heat flux [W m-2]', ('date', 'simulation', 'groundtype')],
+                      ['gt_ground_heat', 'ground heat flux  [W m-2]', ('date', 'simulation', 'groundtype')],
+                      ['gt_heat_advection', 'advected heat  [W m-2]', ('date', 'simulation', 'groundtype')],                      
+                      ['gt_energy_closure', "energy balance error [W m-2]", ('date', 'simulation', 'groundtype')],
+
+                      ['gt_evaporation', 'evaporation [kg m-2 s-1]', ('date', 'simulation', 'groundtype')],                      
+                      ['gt_interception', 'interception rate [kg m-2 s-1]', ('date', 'simulation', 'groundtype')],
+                      ['gt_capillary_rise', 'capillary rise [kg m-2 s-1]', ('date', 'simulation', 'groundtype')],
+                      ['gt_pond_recharge', 'recharge from pond storage  [kg m-2 s-1]', ('date', 'simulation', 'groundtype')],
+                      ['gt_throughfall', 'throughfall  [kg m-2 s-1]', ('date', 'simulation', 'groundtype')],                      
+                      ['gt_water_closure', 'water balance error  [kg m-2 s-1]', ('date', 'simulation', 'groundtype')],
+
+                      ['gt_net_co2', 'net co2 flux  [umol m-2 s-1]', ('date', 'simulation', 'groundtype')],
+                      ['gt_photosynthesis_rate', 'photosynthesis_rate [umol m-2 s-1]', ('date', 'simulation', 'groundtype')],
+                      ['gt_respiration_rate', 'respiration_rate [umol m-2 s-1]', ('date', 'simulation', 'groundtype')],
+
+                      ['gt_temperature', 'temperature [degC]', ('date', 'simulation', 'groundtype')], 
+                      ['gt_water_content', 'water content [g g-1]', ('date', 'simulation', 'groundtype')],                 
+                      ['gt_volumetric_water', 'volumetric water content [m3 m-3]', ('date', 'simulation', 'groundtype')], 
+                      ['gt_water_storage', 'water storage [kg m-2]', ('date', 'simulation', 'groundtype')],     
+                      ['gt_water_potential', 'water potential [m]', ('date', 'simulation', 'groundtype')],  
+                      ['gt_hydraulic_conductivity', 'hydraulic_conductivity [m s-1]', ('date', 'simulation', 'groundtype')],  
+                      ['gt_thermal_conductivity', 'thermal_conductivity [W m-1 K-1]', ('date', 'simulation', 'groundtype')],   
+                      ]
+
+}
 
 # --- logger configuration. Antti / Kersti: add option to define logger output file name?
 logging_configuration = {

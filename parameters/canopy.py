@@ -46,9 +46,9 @@ radiation = {'clump': 0.7,  # clumping index [-]
              }
 
 # --- interception --- 
-interception = {'wmax': 0.2e-03,  # maximum interception storage capacity for rain [m per unit of LAI]  - Watanabe & Mizunani coniferous trees
-                'wmaxsnow': 0.8e-03,  # maximum interception storage capacity for snow [m per unit of LAI] - about 4 * wmax (Koivusalo & Kokkonen 2002)
-                'w_ini': 0.0,  # initial canopy storage [m]
+interception = {'wmax': 0.2,  # maximum interception storage capacity for rain [kg m-2 per unit of LAI]  - Watanabe & Mizunani coniferous trees
+                'wmaxsnow': 0.8,  # maximum interception storage capacity for snow [kg m-2 per unit of LAI] - about 4 * wmax (Koivusalo & Kokkonen 2002)
+                'w_ini': 0.0,  # initial canopy storage [kg m-2]
                 'Tmin': 0.0,  # temperature below which all is snow [degC]
                 'Tmax': 2.0,  # temperature above which all is water [degC]- Koivusalo & Kokkonen 2002
                 'leaf_orientation': 0.5, # leaf orientation factor for randomdly oriented leaves

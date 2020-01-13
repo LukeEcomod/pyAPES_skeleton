@@ -38,7 +38,8 @@ def write_ncf(nsim=None, results=None, ncf=None):
             #     print(key, length, type(results[key]), results[key], np.shape(ncf[key]))
             if length > 1:
                 ncf[key][:, nsim, :] = results[key]
-            elif key == 'soil_z' or key == 'canopy_z' or key == 'canopy_planttypes':
+            elif key == 'soil_z' or key == 'canopy_z' or \
+                 key == 'canopy_planttypes' or key == 'ffloor_groundtypes':
                 if nsim == 0:
                     ncf[key][:] = results[key]
             else:
@@ -49,7 +50,8 @@ def initialize_netcdf(variables,
                       sim,
                       soil_nodes,
                       canopy_nodes,
-                      plant_nodes,
+                      planttypes,
+                      groundtypes,
                       forcing,
                       filepath='results/',
                       filename='climoss.nc',
@@ -68,13 +70,6 @@ def initialize_netcdf(variables,
     from netCDF4 import Dataset, date2num
     from datetime import datetime
 
-    # dimensions
-    date_dimension = None
-    simulation_dimension = sim
-    soil_dimension = soil_nodes
-    canopy_dimension = canopy_nodes
-    ptypes_dimension = plant_nodes
-
     pyAPES_folder = os.getcwd()
     filepath = os.path.join(pyAPES_folder, filepath)
 
@@ -89,12 +84,13 @@ def initialize_netcdf(variables,
     ncf.history = 'created ' + datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     ncf.source = 'pyAPES_beta2018'
 
-    ncf.createDimension('date', date_dimension)
-    ncf.createDimension('simulation', simulation_dimension)
-    ncf.createDimension('soil', soil_dimension)
-    ncf.createDimension('canopy', canopy_dimension)
-    ncf.createDimension('planttype', ptypes_dimension)
-
+    ncf.createDimension('date', None)
+    ncf.createDimension('simulation', sim)
+    ncf.createDimension('soil', soil_nodes)
+    ncf.createDimension('canopy', canopy_nodes)
+    ncf.createDimension('planttype', planttypes)
+    ncf.createDimension('groundtype', groundtypes)
+    
     time = ncf.createVariable('date', 'f8', ('date',))
     time.units = 'days since 0001-01-01 00:00:00.0'
     time.calendar = 'standard'
@@ -108,7 +104,7 @@ def initialize_netcdf(variables,
         var_unit = var[1]
         var_dim = var[2]
 
-        if var_name == 'canopy_planttypes':
+        if var_name == 'canopy_planttypes' or var_name == 'ffloor_groundtypes':
             variable = ncf.createVariable(
                 var_name, 'S10', var_dim)
         else:
