@@ -27,10 +27,10 @@ soil_respiration = {
         'moisture_coeff': [3.83, 4.43, 1.25, 0.854]  # Skopp moisture function param [a ,b, d, g]}
         }
 
-litter = {
-        'name': 'litter',
+Litter = {
+        'name': 'Litter',
         'layer_type': 'litter',
-        'coverage': 0.2,  # [-]
+        'coverage': 0.25,  # [-]
         'height': 0.03,  # [m]
         'roughness_height': 0.01,  # [m]
         'bulk_density': 45.0,  # [kg m\ :sup:`-3`]
@@ -56,27 +56,26 @@ litter = {
         'initial_conditions': {'temperature': 10.0,
                                'water_content': 4.0}
         }
-
+        
 Pleurozium = {
         'name': 'Pleurozium schreberi',  # (Brid.) Mitt.
         'layer_type': 'bryophyte',
-        'coverage': 0.0,
+        'coverage': 0.25,
         'height': 0.095,  # Soudziloskaia et al (2013)
         'roughness_height': 0.01,
         'bulk_density': 17.1,  # Soudziloskaia et al (2013)
         'max_water_content': 10.0,
         'min_water_content': 1.5,
         'porosity': 0.98,
-        'photosynthesis': { # per what?
-            'amax': 1.8,  # check from Rice et al. 2011 Bryologist Table 1
-            'b': 150.0,  # check from Rice et al. 2011 Bryologist Table 1
-            'moisture_coeff': [6.4355, -14.0605, 9.1867, -0.8720],
-            'temperature_coeff': [-4.3e-5, -8.3e-4, 0.08, 0.1]
-        },
-        'respiration': {# per what?
-            'q10': 2.0,  # check from Rice et al. 2011 Bryologist Table 1
-            'r10': 0.7  # check from Rice et al. 2011 Bryologist Table 1
-        },
+        'photosynthesis': { # farquhar-parameters
+            'Vcmax': 15.0, 'Jmax': 28.5, 'Rd': 0.75, # umolm-2s-1
+              'alpha': 0.3, 'theta': 0.8, 'beta': 0.9, # quantum yield, curvature, co-limitation
+              'gmax': 0.02, 'wopt': 7.0, 'a0': 0.7, 'a1': -0.263, 'CAP_desic': [0.44, 7.0],
+              'tresp': {'Vcmax': [69.83, 200.0, 27.56],
+                        'Jmax': [100.28, 147.92, 19.8],
+                        'Rd': [33.0]
+                       }
+              },
         'optical_properties': {  # [0.1102, 0.2909, 0.98]
             'emissivity': 0.98,
             'albedo': {'PAR': 0.11, 'NIR': 0.29} # albedos when fully hydrated [-]
@@ -93,11 +92,10 @@ Pleurozium = {
                                'water_content': 10.0}
         }
 
-#        'water_retention_parameters': [0.445, 0.02, 0.103, 2.229, 1.17e-4, -2.487],
 Hylocomium = {
         'name': 'Hylocomium splendens',  # (Hedw.) B.S.G.
         'layer_type': 'bryophyte',
-        'coverage': 0.8,
+        'coverage': 0.25,
         'height': 0.06,  # Soudziloskaia et al (2013)
         'roughness_height': 0.01,
         #'leaf_area_index': 1.212,
@@ -107,16 +105,15 @@ Hylocomium = {
         'max_water_content': 10.0, # g g-1
         'min_water_content': 1.5,
         'porosity': 0.98,
-        'photosynthesis': {
-                'amax': 1.8,  # check from Rice et al. 2011 Bryologist Table 1
-                'b': 150.0,  # check from Rice et al. 2011 Bryologist Table 1
-                'moisture_coeff': [6.4355, -14.0605, 9.1867, -0.8720],
-                'temperature_coeff': [-4.3e-5, -8.3e-4, 0.08, 0.1]
-                },
-        'respiration': { #  [2.0, 1.1]
-                'q10': 2.0,  # check from Rice et al. 2011 Bryologist Table 1
-                'r10': 0.7  # check from Rice et al. 2011 Bryologist Table 1
-                },
+        'photosynthesis': { # farquhar-parameters
+            'Vcmax': 15.0, 'Jmax': 28.5, 'Rd': 0.75, # umolm-2s-1
+              'alpha': 0.3, 'theta': 0.8, 'beta': 0.9, # quantum yield, curvature, co-limitation
+              'gmax': 0.02, 'wopt': 7.0, 'a0': 0.7, 'a1': -0.263, 'CAP_desic': [0.44, 7.0],
+              'tresp': {'Vcmax': [69.83, 200.0, 27.56],
+                        'Jmax': [100.28, 147.92, 19.8],
+                        'Rd': [33.0]
+                       }
+              },
         'optical_properties': { # [0.1102, 0.2909, 0.98],
                 'emissivity': 0.98,
                 'albedo': {'PAR': 0.11, 'NIR': 0.29} # albedos when fully hydrated [-]
@@ -136,7 +133,7 @@ Hylocomium = {
 Sphagnum = {
         'name': 'Sphagnum fuscum',
         'layer_type': 'bryophyte',
-        'coverage': 0.0,
+        'coverage': 0.25,
         'height': 0.045,    # Soudziloskaia et al (2013)
         'roughness_height': 0.01,
         #'leaf_area_index': 2.136,
@@ -146,16 +143,15 @@ Sphagnum = {
         'max_water_content': 18.0,
         'min_water_content': 1.5,
         'porosity': 0.98,
-        'photosynthesis': {  # [4.0, 175.0],  # Amax, b (half-saturation rate)
-            'amax': 4.0,  # Sphagnum Rice et al. 2008 Am. J. Bot. Table 3
-            'b': 175.0,  # Sphagnum Rice et al. 2008 Am. J. Bot. Table 3
-            'moisture_coeff': [6.4355, -14.0605, 9.1867, -0.8720],
-            'temperature_coeff': [-4.3e-5, -8.3e-4, 0.08, 0.1]
-            },
-        'respiration': {
-            'q10': 2.0,  # Rice et al. 2008 Am. J. Bot. Table 3
-            'r10': 0.72  # Rice et al. 2008 Am. J. Bot. Table 3
-            },
+        'photosynthesis': { # farquhar-parameters
+            'Vcmax': 45.0, 'Jmax': 85.5, 'Rd': 1.35, # umolm-2s-1
+              'alpha': 0.3, 'theta': 0.8, 'beta': 0.9, # quantum yield, curvature, co-limitation
+              'gmax': 0.04, 'wopt': 7.0, 'a0': 0.7, 'a1': -0.263, 'CAP_desic': [0.58, 10.0],
+              'tresp': {'Vcmax': [69.83, 200.0, 27.56],
+                        'Jmax': [100.28, 147.92, 19.8],
+                        'Rd': [33.0]
+                       }
+              },
         'optical_properties': { #  [0.0975, 0.2674, 0.98]
             'emissivity': 0.98,
             'albedo': {'PAR': 0.10, 'NIR': 0.27} # albedos when fully hydrated [-]
@@ -169,13 +165,12 @@ Sphagnum = {
             'pore_connectivity': -2.37
             },
         'initial_conditions': {'temperature': 10.0,
-                               'water_content': 4.0}
+                               'water_content': 9.0}
     }
-
 
 forestfloor = {
         'bottom_layer_types': {
-                'litter': litter,
+                'litter': Litter,
                 'hylocomium': Hylocomium,
                 'pleurozium': Pleurozium,
                 'sphagnum': Sphagnum
@@ -183,6 +178,124 @@ forestfloor = {
         'snowpack': snowpack,
         'soil_respiration': soil_respiration
         }
+
+#%% for empirical photosynthetic light-response - case
+        
+#Pleurozium = {
+#        'name': 'Pleurozium schreberi',  # (Brid.) Mitt.
+#        'layer_type': 'bryophyte',
+#        'coverage': 0.0,
+#        'height': 0.095,  # Soudziloskaia et al (2013)
+#        'roughness_height': 0.01,
+#        'bulk_density': 17.1,  # Soudziloskaia et al (2013)
+#        'max_water_content': 10.0,
+#        'min_water_content': 1.5,
+#        'porosity': 0.98,
+#        'photosynthesis': { # per what?
+#            'amax': 1.8,  # check from Rice et al. 2011 Bryologist Table 1
+#            'b': 150.0,  # check from Rice et al. 2011 Bryologist Table 1
+#            'moisture_coeff': [6.4355, -14.0605, 9.1867, -0.8720],
+#            'temperature_coeff': [-4.3e-5, -8.3e-4, 0.08, 0.1]
+#        },
+#        'respiration': {# per what?
+#            'q10': 2.0,  # check from Rice et al. 2011 Bryologist Table 1
+#            'r10': 0.7  # check from Rice et al. 2011 Bryologist Table 1
+#        },
+#        'optical_properties': {  # [0.1102, 0.2909, 0.98]
+#            'emissivity': 0.98,
+#            'albedo': {'PAR': 0.11, 'NIR': 0.29} # albedos when fully hydrated [-]
+#        },
+#        'water_retention': {
+#            # 'theta_s': 0.17,
+#            # 'theta_r': 0.026,
+#            'alpha': 0.13,
+#            'n': 2.17,
+#            'saturated_conductivity': 1.16e-8,  # [m s-1]
+#            'pore_connectivity': -2.37
+#        },
+#        'initial_conditions': {'temperature': 10.0,
+#                               'water_content': 10.0}
+#        }
+
+#        'water_retention_parameters': [0.445, 0.02, 0.103, 2.229, 1.17e-4, -2.487],
+#Hylocomium = {
+#        'name': 'Hylocomium splendens',  # (Hedw.) B.S.G.
+#        'layer_type': 'bryophyte',
+#        'coverage': 0.8,
+#        'height': 0.06,  # Soudziloskaia et al (2013)
+#        'roughness_height': 0.01,
+#        #'leaf_area_index': 1.212,
+#        #'specific_leaf_area': 145.0,  # Bond-Lamberty and Gower (2007)
+#        #'dry_mass': bulk_density x height
+#        'bulk_density': 14.3,  # kg m-3 Soudziloskaia et al (2013)
+#        'max_water_content': 10.0, # g g-1
+#        'min_water_content': 1.5,
+#        'porosity': 0.98,
+#        'photosynthesis': {
+#                'amax': 1.8,  # check from Rice et al. 2011 Bryologist Table 1
+#                'b': 150.0,  # check from Rice et al. 2011 Bryologist Table 1
+#                'moisture_coeff': [6.4355, -14.0605, 9.1867, -0.8720],
+#                'temperature_coeff': [-4.3e-5, -8.3e-4, 0.08, 0.1]
+#                },
+#        'respiration': { #  [2.0, 1.1]
+#                'q10': 2.0,  # check from Rice et al. 2011 Bryologist Table 1
+#                'r10': 0.7  # check from Rice et al. 2011 Bryologist Table 1
+#                },
+#        'optical_properties': { # [0.1102, 0.2909, 0.98],
+#                'emissivity': 0.98,
+#                'albedo': {'PAR': 0.11, 'NIR': 0.29} # albedos when fully hydrated [-]
+#                },
+#        'water_retention': {
+#            # 'theta_s': 0.17,  # max_water_content * 1e-3 * bulk_density
+#            # 'theta_r': 0.026,  # min_water_content * 1e-3 * bulk_density
+#            'alpha': 0.13,
+#            'n': 2.17,
+#            'saturated_conductivity': 1.16e-8,  # [m s-1]
+#            'pore_connectivity': -2.37
+#            },
+#        'initial_conditions': {'temperature': 10.0,
+#                               'water_content': 10.0},
+#    }    
+    
+#Sphagnum = {
+#        'name': 'Sphagnum fuscum',
+#        'layer_type': 'bryophyte',
+#        'coverage': 0.0,
+#        'height': 0.045,    # Soudziloskaia et al (2013)
+#        'roughness_height': 0.01,
+#        #'leaf_area_index': 2.136,
+#        #'specific_leaf_area': 356.0,  # Bond-Lamberty and Gower (2007)
+#        #'dry_mass': 1.58,  # Soudziloskaia et al (2013)
+#        'bulk_density': 35.1,  # Soudziloskaia et al (2013)
+#        'max_water_content': 18.0,
+#        'min_water_content': 1.5,
+#        'porosity': 0.98,
+#        'photosynthesis': {  # [4.0, 175.0],  # Amax, b (half-saturation rate)
+#            'amax': 4.0,  # Sphagnum Rice et al. 2008 Am. J. Bot. Table 3
+#            'b': 175.0,  # Sphagnum Rice et al. 2008 Am. J. Bot. Table 3
+#            'moisture_coeff': [6.4355, -14.0605, 9.1867, -0.8720],
+#            'temperature_coeff': [-4.3e-5, -8.3e-4, 0.08, 0.1]
+#            },
+#        'respiration': {
+#            'q10': 2.0,  # Rice et al. 2008 Am. J. Bot. Table 3
+#            'r10': 0.72  # Rice et al. 2008 Am. J. Bot. Table 3
+#            },
+#        'optical_properties': { #  [0.0975, 0.2674, 0.98]
+#            'emissivity': 0.98,
+#            'albedo': {'PAR': 0.10, 'NIR': 0.27} # albedos when fully hydrated [-]
+#            },
+#        'water_retention': {
+#            # 'theta_s': 0.63,  # max_water_content / WATER_DENSITY * bulk_density
+#            # 'theta_r': 0.10,  # min_water_content / WATER_DENSITY * bulk_density
+#            'alpha': 0.10,
+#            'n': 1.4,
+#            'saturated_conductivity': 3.5e-4,  # [m s-1]
+#            'pore_connectivity': -2.37
+#            },
+#        'initial_conditions': {'temperature': 10.0,
+#                               'water_content': 4.0}
+#    }
+
 
 #Community-scale light-responses and respiation rates (umol m-2 s-1):
 

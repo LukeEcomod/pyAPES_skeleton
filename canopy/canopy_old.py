@@ -32,12 +32,13 @@ LAST EDITS: Samuli Launiainen 26.11.2019:
 
 import logging
 import numpy as np
-from .constants import MOLAR_MASS_H2O, EPS, STEFAN_BOLTZMANN, DEG_TO_KELVIN, WATER_DENSITY
+from .constants import MOLAR_MASS_H2O, EPS
+
 from .radiation import Radiation
 from .micromet import Micromet
-from .interception_dev import Interception
+from .interception import Interception
 from .planttype.planttype import PlantType
-from .ground.forestfloor_dev import ForestFloor
+from .forestfloor.forestfloor_dev import ForestFloor
 
 logger = logging.getLogger(__name__)
 
@@ -157,10 +158,8 @@ class CanopyModel(object):
         self.micromet = Micromet(self.z, self.lad, self.hc, cpara['micromet'])
 
         self.interception = Interception(cpara['interception'], self.lad * self.dz)
-        
-        # forestfloor. Now soil respiration profile is as root_distr
-        self.forestfloor = ForestFloor(cpara['forestfloor'],
-                                       respiration_profile=self.root_distr)
+
+        self.forestfloor = ForestFloor(cpara['forestfloor'])
 
     def run_daily(self, doy, Ta, Rew=1.0):
         r""" Computatations at daily timestep.
@@ -195,7 +194,7 @@ class CanopyModel(object):
         Args:
             dt: timestep [s]
             forcing (dict): meteorological forcing at ubc and soil state at uppermost soil layer.
-                'precipitation': precipitation rate [kg m-2 s-1]
+                'precipitation': precipitation rate [m s-1]
                 'air_temperature': air temperature [\ :math:`^{\circ}`\ C]
                 'wind_speed': wind speed [m s-1]
                 'friction_velocity': friction velocity [m s-1]
@@ -210,7 +209,7 @@ class CanopyModel(object):
                 'soil_water_potential': [m] properties of first soil node
                 'soil_volumetric_water': [m m\ :sup:`-3`\ ] properties of first soil node
                 'soil_volumetric_air': [m m\ :sup:`-3`\ ] properties of first soil node
-                'soil_pond_storage': [kg m-2] properties of first soil node
+                'soil_pond_storage': [m] properties of first soil node
             'parameters':
                 'date'
                 'thermal_conductivity': [W m\ :sup:`-1`\  K\ :sup:`-1`\ ] properties of first soil node
@@ -238,10 +237,12 @@ class CanopyModel(object):
 
         # --- solve SW profiles within canopy ---
 
+        ff_albedo = self.forestfloor.shortwave_albedo()
+
         radiation_profiles = {}
 
         radiation_params = {
-            'ff_albedo': self.forestfloor.albedo,
+            'ff_albedo': ff_albedo,
             'LAIz': self.lad * self.dz,
         }
 
@@ -283,7 +284,7 @@ class CanopyModel(object):
         Switch_WMA = self.Switch_WMA
 
         # initialize state variables
-        T, H2O, CO2, Tleaf, Tsurf = self._restore(forcing)
+        T, H2O, CO2, Tleaf = self._restore(forcing)
         sources = {
             'h2o': None,  # [mol m-3 s-1]
             'co2': None,  # [umol m-3 s-1]
@@ -299,23 +300,22 @@ class CanopyModel(object):
 
             iter_no += 1
             Tleaf_prev = Tleaf.copy()
-            Tsurf_prev = Tsurf
+            Tsurf_prev = self.forestfloor.temperature
 
             if self.Switch_Ebal:
                 # ---  LW profiles within canopy ---
                 
                 # emitted longwave from forest floor
-                lw_surf = self.forestfloor.emissivity * STEFAN_BOLTZMANN *\
-                                np.power(Tsurf + DEG_TO_KELVIN, 4)
+                ff_longwave = self.forestfloor.longwave_radiation()
                 lw_forcing = {
                     'lw_in': forcing['lw_in'],
-                    'lw_up': lw_surf,
+                    'lw_up': ff_longwave['radiation'],
                     'leaf_temperature': Tleaf_prev,
                 }
 
                 lw_params = {
                     'LAIz': self.lad * self.dz,
-                    'ff_emissivity': self.forestfloor.emissivity
+                    'ff_emissivity': ff_longwave['emissivity']
                 }
                 
                 # solve LW profiles 
@@ -454,8 +454,7 @@ class CanopyModel(object):
 
             err_Tl = max(abs(Tleaf - Tleaf_prev))
 
-            # --- solve forest floor water & heat balance & carbon exchange ---
-            
+            # --- forest floor water & heat balance & carbon exchange ---
             # compile control and forcing dicts
             ff_controls = {
                 'energy_balance': self.Switch_Ebal,
@@ -468,14 +467,15 @@ class CanopyModel(object):
             ff_params = {
                 'reference_height': self.z[1],  # height of first node above ground
                 'soil_depth': parameters['soil_depth'],
-                'soil_hydraulic_conductivity': parameters['soil_hydraulic_conductivity'][0],
+                'soil_hydraulic_conductivity': parameters['soil_hydraulic_conductivity'][0],  # comes in for whole rooting depth
                 'soil_thermal_conductivity': parameters['soil_thermal_conductivity'],
                 'iteration': iter_no,
+                'root_distribution': self.root_distr
             }
 
             ff_forcing = {
-                'precipitation_rain': wetleaf_fluxes['throughfall_rain'],
-                'precipitation_snow': wetleaf_fluxes['throughfall_snow'],
+                'throughfall_rain': wetleaf_fluxes['throughfall_rain'],
+                'throughfall_snow': wetleaf_fluxes['throughfall_snow'],
                 'par': radiation_profiles['par']['ground'],
                 'air_temperature': T[1],
                 'h2o': H2O[1],
@@ -484,7 +484,7 @@ class CanopyModel(object):
                 'wind_speed': U[1],
                 'friction_velocity': ustar[1],
                 'soil_temperature': forcing['soil_temperature'],
-                'soil_water_potential': forcing['soil_water_potential'][0],
+                'soil_water_potential': forcing['soil_water_potential'][0],  # comes in for whole rooting depth
                 'soil_volumetric_water': forcing['soil_volumetric_water'],
                 'soil_volumetric_air': forcing['soil_volumetric_air'],
                 'soil_pond_storage': forcing['soil_pond_storage']
@@ -495,18 +495,22 @@ class CanopyModel(object):
                 ff_forcing.update({
                     'nir': radiation_profiles['nir']['ground'],
                     'lw_dn': radiation_profiles['lw']['down'][0],
+                    'lw_up': radiation_profiles['lw']['up'][0]
                 })
             
             # --- solve forestfloor
-            ff_fluxes, ff_states, gt_results = self.forestfloor.run(
-                        dt=dt,
-                        forcing=ff_forcing,
-                        parameters=ff_params,
-                        controls=ff_controls
-                        )
-            Tsurf = ff_states['temperature']
-            err_Ts = abs(Tsurf_prev - Tsurf)
-            
+            fluxes_ffloor, states_ffloor = self.forestfloor.run(
+                dt=dt,
+                forcing=ff_forcing,
+                parameters=ff_params,
+                controls=ff_controls
+            )
+
+            err_Ts = abs(Tsurf_prev - self.forestfloor.temperature)
+
+            #net CO2 flux
+            Fc_gr = -fluxes_ffloor['bryo_photosynthesis'] + fluxes_ffloor['respiration']
+
             # --- compute scalar profiles (H2O, CO2, T) in canopy air-space
             if Switch_WMA is False:
                 # to recognize oscillation
@@ -518,9 +522,9 @@ class CanopyModel(object):
                 H2O, CO2, T, err_h2o, err_co2, err_t = self.micromet.scalar_profiles(
                         gam, H2O, CO2, T, forcing['air_pressure'],
                         source=sources,
-                        lbc={'H2O': ff_fluxes['evaporation'] / MOLAR_MASS_H2O,
-                             'CO2': ff_fluxes['net_co2'],
-                             'T': ff_fluxes['sensible_heat']},
+                        lbc={'H2O': fluxes_ffloor['evaporation'],
+                             'CO2': Fc_gr,
+                             'T': fluxes_ffloor['sensible_heat']},
                         Ebal=self.Switch_Ebal)
 
                 # to recognize oscillation
@@ -550,27 +554,27 @@ class CanopyModel(object):
                     # reset values
                     iter_no = 0
                     err_t, err_h2o, err_co2, err_Tl, err_Ts = 999., 999., 999., 999., 999.
-                    T, H2O, CO2, Tleaf, Tsurf = self._restore(forcing)
+                    T, H2O, CO2, Tleaf = self._restore(forcing)
             else:
                 err_h2o, err_co2, err_t = 0.0, 0.0, 0.0
 
         # --- end of iterative solution of timestep
         
-        # --- update state variables
+        # --- update state variables and prepare outputs to calling function
         self.interception.update()
         self.forestfloor.update()
 
-        # --- Compile outputs
-        
         # --- integrate to ecosystem fluxes (per m-2 ground) ---
-        flux_co2 = (np.cumsum(sources['co2']) * self.dz + ff_fluxes['net_co2'])  # [umol m-2 s-1]
-        flux_latent_heat = (np.cumsum(sources['latent_heat']) * self.dz + ff_fluxes['latent_heat'])  # [W m-2]
-        flux_sensible_heat = (np.cumsum(sources['sensible_heat']) * self.dz + ff_fluxes['sensible_heat'])  # [W m-2]
+        flux_co2 = (np.cumsum(sources['co2']) * self.dz + Fc_gr)  # [umol m-2 s-1]
+        flux_latent_heat = (np.cumsum(sources['latent_heat']) * self.dz
+                            + fluxes_ffloor['latent_heat'])  # [W m-2]
+        flux_sensible_heat = (np.cumsum(sources['sensible_heat']) * self.dz
+                              + fluxes_ffloor['sensible_heat'])  # [W m-2]
 
         # net ecosystem exchange [umol m-2 s-1]
         NEE = flux_co2[-1]
         # ecosystem respiration [umol m-2 s-1]
-        Reco = sum([pt_st['dark_respiration'] for pt_st in pt_stats]) + ff_fluxes['respiration']
+        Reco = sum([pt_st['dark_respiration'] for pt_st in pt_stats]) + fluxes_ffloor['respiration']
         # ecosystem GPP [umol m-2 s-1]
         GPP = - NEE + Reco
         # stand transpiration [m s-1]
@@ -581,7 +585,7 @@ class CanopyModel(object):
         pt_index = 0
         for pt in self.planttypes:
             if pt.LAImax > 0.0:
-                Tr_pt = pt_stats[pt_index]['transpiration'] * MOLAR_MASS_H2O / WATER_DENSITY
+                Tr_pt = pt_stats[pt_index]['transpiration'] * MOLAR_MASS_H2O * 1e-3
                 rootsink[pt.Roots.ix] += pt.Roots.wateruptake(
                         transpiration=Tr_pt,
                         h_soil=forcing['soil_water_potential'],
@@ -593,11 +597,21 @@ class CanopyModel(object):
             # check energy closure of canopy
             # -- THIS IS EQUAL TO frsource (the error caused by linearizing sigma*ef*T^4)
             energy_closure =  sum((radiation_profiles['sw_absorbed'] +
-                                   radiation_profiles['lw']['net_leaf']) * self.lad * self.dz) - (# absorbed radiation
+                                   radiation_profiles['lw']['net_leaf']) * self.lad * self.dz) - (  # absorbed radiation
                               sum(sources['sensible_heat'] * self.dz)  # sensible heat
                               + sum(sources['latent_heat'] * self.dz))  # latent heat
-        
-        # return state and fluxes in dictionaries: to save into results, name convention and dimensions must
+
+        # --- outputs from forestfloor
+
+        fluxes_ffloor.update({
+                'potential_infiltration': fluxes_ffloor['potential_infiltration'],
+                'evaporation_bryo': fluxes_ffloor['bryo_evaporation'] * MOLAR_MASS_H2O * 1e-3,  # [m s-1]
+                'evaporation_litter': fluxes_ffloor['litter_evaporation'] * MOLAR_MASS_H2O * 1e-3,  # [m s-1]
+                'evaporation_soil': fluxes_ffloor['soil_evaporation'] * MOLAR_MASS_H2O * 1e-3,  # [m s-1]
+                'evaporation': fluxes_ffloor['evaporation'] * MOLAR_MASS_H2O * 1e-3  # [m s-1]
+                })
+
+        # return state and fluxes in dictionary: to save into results, name convention and dimensions must
         # follow those in 'general parameters'
         
         outputs_canopy = {
@@ -622,16 +636,16 @@ class CanopyModel(object):
                 'par_absorbed_sunlit': radiation_profiles['par']['sunlit']['absorbed'], #  [W m-2 (leaf)]                
                 'par_absorbed_shaded': radiation_profiles['par']['shaded']['absorbed'],
                 
-                # total fluxes from interception model [kg m-2 s-1 = mm s-1], divide with WATER_DENSITY to get [kg m-2 s-1 = mm s-1]
+                # total fluxes from interception model [m s-1], multiply with WATER_DENSITY to get [kg m-2 s-1 = mm s-1]
                 'interception_storage': sum(self.interception.W),
                 'throughfall': wetleaf_fluxes['throughfall'],
                 'interception': wetleaf_fluxes['interception'],
                 'evaporation': wetleaf_fluxes['evaporation'],
                 'condensation': wetleaf_fluxes['condensation'],
                 'condensation_drip': wetleaf_fluxes['condensation_drip'],
-                'water_closure': wetleaf_fluxes['water_closure'],
+                'water_closure': wetleaf_fluxes['water_closure'], # m s-1
                 
-                # vertical profiles from interception model [kg m-2 s-1 = mm s-1]
+                # vertical profiles from interception model [m s-1]
                 'evaporation_ml': wetleaf_fluxes['evaporation_ml'],
                 'throughfall_ml': wetleaf_fluxes['throughfall_ml'],
                 'condensation_drip_ml': wetleaf_fluxes['condensation_drip_ml'],
@@ -652,6 +666,7 @@ class CanopyModel(object):
                 # root sink profile for Soil-model
                 'root_sink' : rootsink, # [m s-1]
                 }
+
 
         if self.Switch_Ebal:
             # layer - averaged leaf temperature; average over all plant-types
@@ -692,7 +707,7 @@ class CanopyModel(object):
         # integrated values over planttype
         pt_results = {
                 'root_water_potential': np.array([pt.Roots.h_root for pt in self.planttypes]),
-                'total_transpiration': np.array([pt_st['transpiration'] * MOLAR_MASS_H2O for pt_st in pt_stats]), #[kg m-2]
+                'total_transpiration': np.array([pt_st['transpiration'] * MOLAR_MASS_H2O * 1e-3 for pt_st in pt_stats]),
                 'total_gpp': np.array([pt_st['net_co2'] + pt_st['dark_respiration'] for pt_st in pt_stats]),
                 'total_dark_respiration': np.array([pt_st['dark_respiration'] for pt_st in pt_stats]),
                 'total_stomatal_conductance_h2o':  np.array([pt_st['stomatal_conductance'] for pt_st in pt_stats]),
@@ -707,12 +722,7 @@ class CanopyModel(object):
         pt_results.update(pt_profs)
         del pt_profs
 
-        # --- outputs from forestfloor: ff_fluxes and groudtype -specific resutls
-        ff_fluxes.update(ff_states)
-        ff_fluxes.update({'par_albedo': self.forestfloor.albedo['PAR'],
-                          'nir_albedo': self.forestfloor.albedo['NIR']}
-                        )
-        return outputs_canopy, pt_results, ff_fluxes, gt_results
+        return outputs_canopy, fluxes_ffloor, states_ffloor, pt_results
 
     def _restore(self, forcing):
         """ initialize state variables """
@@ -721,13 +731,12 @@ class CanopyModel(object):
         H2O = self.ones * ([forcing['h2o']])
         CO2 = self.ones * ([forcing['co2']])
         Tleaf = T.copy() * self.lad / (self.lad + EPS)
-        Tground = self.forestfloor.temperature
+        self.forestfloor.restore()
         self.interception.Tl_wet = T.copy()
-        
         for pt in self.planttypes:
             pt.Tl_sh = T.copy()
             pt.Tl_sl = T.copy()
 
-        return T, H2O, CO2, Tleaf, Tground
+        return T, H2O, CO2, Tleaf
 
 # EOF

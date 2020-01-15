@@ -6,13 +6,23 @@
 .. moduleauthor:: Antti-Jussi Kieloaho and Samuli Launiainen
 
 organiclayer describes structural and functional properties and processes of
-organic layer (porous media) at forest floor. It can represnt moss/lichen (bryophyte)
-species/groups at the forest bottom layer, or litter layer. 
+organic layer (porous media) at forest floor bottom layer.
+It can represnt moss/lichen (bryophyte) species/groups or litter layer. 
 
 Created on Tue Mar 14 08:15:50 2017.
 
-Last edit 10.1.2020 / SL
+Last edit 15.1.2020 / SL
 
+Todo:
+    - check behavior of water_exchange
+    - handle conditions under snowcover
+    - organic layer freezing/melting
+    - solve surface temperature from energy balance (virtual 2-layer)
+    - surface conductance parameterization: now based on classic log wind profile
+    
+    - respiration of litter layer: parameter values, dry mass or surface area-based?
+        Add moisture response
+    - Farquhar for bryophyte photosynthesis: surface-area or dry-mass based?
 """
 
 import numpy as np
@@ -23,7 +33,7 @@ from canopy.constants import WATER_DENSITY, MOLAR_MASS_H2O, MOLAR_MASS_C, LATENT
                              MOLECULAR_DIFFUSIVITY_CO2, MOLECULAR_DIFFUSIVITY_H2O, \
                              THERMAL_DIFFUSIVITY_AIR, AIR_DENSITY, AIR_VISCOSITY, GRAVITY 
 
-from .carbon import BryophyteCarbon, OrganicRespiration
+from .carbon import BryophyteFarquhar, OrganicRespiration
 
 #: machine epsilon
 EPS = np.finfo(float).eps
@@ -71,12 +81,24 @@ class OrganicLayer(object):
                     'saturated conductivity': [m s\ :sup:`-1`]
                     'pore connectivity': (l) [-]
                 'porosity': [m\ :sup:`3` m\ :sup:`-3`\ ]
-                'photosynthesis' (dict):
-                    Amax [\ :math:`\mu`\ mol m\ :sup:`-1`\ :sub:`leaf` s\ :sup:`-1`]
-                    b [mol mol\ :sup:`-1`]
-                    temperature_coeff
-                    moisture_coeff
-                'respiration' (dict):
+                'photosynthesis' (dict): : only if layer_type == 'litter'
+                    if farquhar-model as now:
+                        'Vcmax', 'Jmax', 'Rd', 'alpha', 'theta', 'beta',
+                        'gmax', 'wopt', 'a0', 'a1', 'CAP_desic', 'tresp'
+      'photosynthesis': { # farquhar-parameters
+            'Vcmax': 15.0, 'Jmax': 28.5, 'Rd': 0.75, # umolm-2s-1
+              'alpha': 0.3, 'theta': 0.8, 'beta': 0.9, # quantum yield, curvature, co-limitation
+              'gmax': 0.02, 'wopt': 7.0, 'a0': 0.7, 'a1': -0.263, 'CAP_desic': [0.44, 7.0],
+              'tresp': {'Vcmax': [69.83, 200.0, 27.56],
+                        'Jmax': [100.28, 147.92, 19.8],
+                        'Rd': [33.0], 'include': 'y'
+                       }                        
+                    if empirical function used:
+                        Amax [\ :math:`\mu`\ mol m\ :sup:`-1`\ :sub:`leaf` s\ :sup:`-1`]
+                        b [mol mol\ :sup:`-1`]
+                        temperature_coeff
+                        moisture_coeff
+                'respiration' (dict): only if layer_type == 'litter'
                     0. Q10 [-]
                     1. R10 [\ :math:`\mu`\ mol m\ :sup:`-1`\ :sub:`leaf` s\ :sup:`-1`]
                 'optical_properties' (dict):
@@ -123,7 +145,8 @@ class OrganicLayer(object):
             if (abs(theta_r - properties['water_retention']['theta_r']) > 2*EPS or
                 abs(theta_s - properties['water_retention']['theta_s']) > 2*EPS
                 ):    
-                print('Bryophyte init!: water_retention parameters not consistent with max/min water contents')
+                raise ValueError('Bryophyte init!: water_retention parameters ' 
+                                 + 'not consistent with max/min water contents')
             
         
         # optical properties at full saturation
@@ -132,7 +155,7 @@ class OrganicLayer(object):
         # --- carbon exchange model
         if self.layer_type == 'bryophyte':
             # photosynthesis & respiration
-            self.Carbon = BryophyteCarbon(properties, carbon_pool=0.0)
+            self.Carbon = BryophyteFarquhar(properties['photosynthesis'], carbon_pool=0.0)
         
         if self.layer_type == 'litter':
             # only respiring
@@ -167,7 +190,7 @@ class OrganicLayer(object):
 
     def update_state(self):
         """
-        Updates object states after converged iteration. In pyAPES, called from canopy.
+        Updates object states after converged iteration. In pyAPES, called from canopy.canopy
         """
         self.temperature = self.iteration_results['temperature']
         self.water_storage = self.iteration_results['water_storage']
@@ -197,6 +220,7 @@ class OrganicLayer(object):
                 'soil_temperature': [\ :math:`^{\circ}`\ C]
                 'soil_water_potential': [m]
                 'soil_pond_storage': [kg m-2]
+                'snow_water_equivalent': [kg m-2]
             parameters (dict):
                 'reference_height' [m]
                 'soil_depth': [m]
@@ -211,65 +235,109 @@ class OrganicLayer(object):
             fluxes (dict)
             states (dict)
         """
-
-        if controls['energy_balance']:
-            # calculate moss energy and water balance
-            fluxes, states = self.heat_and_water_exchange(
-                                dt=dt,
-                                forcing=forcing,
-                                parameters=parameters,
-                                nsteps=30,
-                                logger_info=controls['logger_info']
-                                )
-
-        else:
-            # only water balance
-            fluxes, states = self.water_exchange(
-                                dt=dt,
-                                forcing=forcing,
-                                parameters=parameters
-                                )
+        
+        if forcing['snow_water_equivalent'] > 0:
+            # at the moment, don't do anything; return zero fluxes and previous state
+            fluxes = {
+                'net_radiation': 0.0,  # [W m-2]
+                'latent_heat':  0.0,  # [W m-2]
+                'sensible_heat':  0.0,  # [W m-2]
+                'ground_heat':  0.0,  # [W m-2]
+                'heat_advection':  0.0,  # [W m-2]
+                'water_closure':  0.0,  # [mm s-1]
+                'energy_closure': 0.0,  # [W m-2]
+                'interception':  0.0,  # [mm s-1]
+                'evaporation': 0.0,  # [mm s-1]
+                'pond_recharge': 0.0,  # [mm s-1]
+                'capillary_rise': 0.0,  # [mm s-1]
+                'throughfall': forcing['precipitation'],  # [mm s-1]
                 
-        #-- solve carbon exchange
-        if self.layer_type == 'bryophyte':
-            cflx = self.Carbon.carbon_exchange(states['temperature'],
-                                               states['water_content'],
-                                               forcing['par'])
-        else: # 'litter'
-            cflx = self.Carbon.respiration(states['water_content'],
-                                           states['temperature'])           
-        fluxes.update({
-            'photosynthesis': cflx['photosynthesis'],
-            'respiration': cflx['respiration'],
-            'net_co2': cflx['net_co2']})
-
-        # kg m-2
-        states['carbon_pool'] = self.Carbon.carbon_pool - 1e-6 * cflx['net_co2']* MOLAR_MASS_C
-
-        # store iteration results
-        self.iteration_results = states
+                'soil_evaporation': 0.0,
+                
+                'photosynthesis': 0.0,
+                'respiration': 0.0,
+                'net_co2': 0.0,
+                'internal_co2': 0.0,
+                'conductance_co2': 0.0
+                }
         
-        #-- compute soil evaporation through moss layer
+            states = {
+                'volumetric_water': self.volumetric_water,  # [m3 m-3]
+                'water_potential': self.water_potential,  # [m]
+                'water_content': self.water_content,  # [g g-1]
+                'water_storage': self.water_storage,  # [kg m-2] or [mm]
+                'temperature': self.temperature,  # [degC]
+                'hydraulic_conductivity': hydraulic_conductivity(self.water_potential,
+                                                                 self.water_retention),  # [m s-1]
+                'thermal_conductivity': thermal_conductivity(self.volumetric_water),  # [W m-1 K-1]
+                'carbon_pool': self.Carbon.carbon_pool,
+                }
+            
+        else: # no snow
+            if controls['energy_balance']:
+                # calculate moss energy and water balance
+                fluxes, states = self.heat_and_water_exchange(
+                                    dt=dt,
+                                    forcing=forcing,
+                                    parameters=parameters,
+                                    sub_dt=60.0,
+                                    logger_info=controls['logger_info']
+                                    )
+    
+            else:
+                # only water balance
+                fluxes, states = self.water_exchange(
+                                    dt=dt,
+                                    forcing=forcing,
+                                    parameters=parameters
+                                    )
+                    
+            #-- solve c02 exchange
+            if self.layer_type == 'bryophyte':
+                cflx = self.Carbon.co2_exchange(forcing['par'],
+                                                forcing['co2'],
+                                                states['temperature'],
+                                                states['water_content']
+                                                )
 
-        # [mol m-2 s-1]
-        soil_evaporation = evaporation_through_organic_layer(
-            volumetric_water=states['volumetric_water'],  
-            temperature=states['temperature'],
-            porosity=self.porosity,
-            moss_height=self.height,
-            forcing=forcing,
-            parameters=parameters)
-        
-        # [kg m-2 s-1]
-        fluxes['soil_evaporation'] = MOLAR_MASS_H2O * soil_evaporation
-
+            else: # 'litter'
+                cflx = self.Carbon.respiration(states['water_content'],
+                                               states['temperature'])           
+                cflx.update({'internal_co2': -999.0,
+                             'conductance_co2': -999.0
+                             })
+            
+            # append to outputs
+            fluxes.update(cflx)
+    
+            # kg m-2
+            states['carbon_pool'] = self.Carbon.carbon_pool - 1e-6 * cflx['net_co2']* MOLAR_MASS_C
+    
+            # store iteration results
+            self.iteration_results = states
+            
+            #-- compute soil evaporation through moss layer
+    
+            # [mol m-2 s-1]
+            soil_evaporation = evaporation_through_organic_layer(
+                volumetric_water=states['volumetric_water'],  
+                temperature=states['temperature'],
+                porosity=self.porosity,
+                moss_height=self.height,
+                forcing=forcing,
+                parameters=parameters)
+            
+            # soil_evaporation = 0.0
+            # [kg m-2 s-1]
+            fluxes['soil_evaporation'] = MOLAR_MASS_H2O * soil_evaporation
+    
         return fluxes, states
 
     def heat_and_water_exchange(self,
                                 dt,
                                 forcing,
                                 parameters,
-                                nsteps=30,
+                                sub_dt=60.0,
                                 logger_info=''):
         r""" Solves organic layer coupled water and energy balance
         by Forward Euler integration
@@ -284,7 +352,6 @@ class OrganicLayer(object):
                 'lw_dn': [W m\ :sup:`-2`\ ]
                 'h2o': [mol mol\ :sup:`-1`\ ]
                 'air_temperature': [\ :math:`^{\circ}`\ C]
-                'precipitation_temperature': [\ :math:`^{\circ}`\ C]
                 'air_pressure': [Pa]
                 'soil_temperature': [\ :math:`^{\circ}`\ C]
                 'soil_water_potential': [Pa]
@@ -293,7 +360,7 @@ class OrganicLayer(object):
                 'soil_hydraulic_conductivity'
                 'soil_thermal_conductivity'
                 'reference_height' [m]
-            nsteps (int): number of subtimesteps
+            sub_dt (float): internal timestep [s] 
             logger_info: str
     
         Returns:
@@ -326,8 +393,6 @@ class OrganicLayer(object):
         u[0] = self.temperature # [degC]
         u[1] = self.water_storage # [kg m-2]
 
-        # subtimestep [s]
-        sub_dt = dt / nsteps
 
         # -- time loop
         t = 0.0
@@ -597,6 +662,7 @@ class OrganicLayer(object):
                 )
         
         #--- compute energy balance
+        # take reflectivities from previous timestep
         # radiation balance # [J m-2 s-1] or [W m-2]
         
         # [-]
@@ -707,7 +773,6 @@ class OrganicLayer(object):
                 'lw_dn': [W m\ :sup:`-2`\ ]
                 'h2o': [mol mol\ :sup:`-1`\ ]
                 'air_temperature': [\ :math:`^{\circ}`\ C]
-                'precipitation_temperature': [\ :math:`^{\circ}`\ C]
                 'air_pressure': [Pa]
                 #'soil_depth': [m]
                 'soil_temperature': [\ :math:`^{\circ}`\ C]
@@ -843,7 +908,7 @@ class OrganicLayer(object):
     
         # [kg m-2 s-1] or [mm s-1]
         pond_recharge_rate = pond_recharge / dt
-    
+
         # [kg m-2 s-1] or [mm s-1]
         max_recharge_rate = max(
             max_recharge - pond_recharge,
@@ -1042,201 +1107,6 @@ def thermal_conductivity(volumetric_water, method='donnel'):
     # [W/(m K)]
     return heat_conductivity
 
-
-def soil_boundary_layer_conductance(u, z, zo, Ta, dT, P=101300.):
-    """
-    Computes soil surface boundary layer conductance (mol m-2 s-1)
-    assuming velocity profile logarithmic between z and z0.
-    INPUT: u - mean velocity (m/s)
-           z - height of mean velocity u (m)
-           zo - soil surface roughness length for momentum (m)
-           Ta - ambient temperature (degC)
-           dT - soil surface-air temperature difference (degC)
-           P - pressure(Pa)
-    OUTPUT: boundary-layer conductances (mol m-2 s-1)
-        gb_h - heat (mol m-2 s-1)
-        gb_c- CO2 (mol m-2 s-1)
-        gb_v - H2O (mol m-2 s-1)
-    Based on Daamen & Simmons (1996). Note: gb decreases both in
-    unstable and stable conditions compared to near-neutral;
-    nonfeasible?
-    Samuli Launiainen, 18.3.2014
-    to python by Kersti
-    """
-
-    u = np.maximum(u, EPS)
-
-    rho_air = 44.6*(P / 101300.0)*(273.15 / (Ta + 273.13))  # molar density of air [mol/m3]
-
-    delta = 5.0 * GRAVITY * z * dT / ((Ta + 273.15) * u**2)
-    if delta > 0:
-        d = -0.75
-    else:
-        d = -2
-    rb = (np.log(z/zo))**2 / (0.4**2*u)*(1 + delta)**d
-
-    gb_h = rho_air * 1 / rb
-    gb_v = MOLECULAR_DIFFUSIVITY_H2O / THERMAL_DIFFUSIVITY_AIR * gb_h
-    gb_c = MOLECULAR_DIFFUSIVITY_CO2 / THERMAL_DIFFUSIVITY_AIR * gb_h
-
-    return gb_h, gb_c, gb_v
-
-def moss_atm_conductance_old(wind_speed, roughness_height):
-    r""" Estimates boundary layer conductance of bryophyte canopy.
-
-    Simple version without free convection
-
-    Wind speed should represent vertical wind speed at ca. 20 cm above moss
-    canopy (parametrsization derived from wind-tunnel studies). Roughness
-    lengths scale is equal to the 'characteristic vertical height of
-    individual bryophyte shoots' (typically order of 3-10 mm).
-
-    Estimated CO\ :sub:`2` and heat conductances are related to water vapor
-    by the ratio of molecular diffusivities
-    (Campbell and Norman, 1998, eq. 7.29-7.33).
-
-    References:
-        Rice et al., 2001.
-            Significance of variation in bryophyte canopy structure.
-            Amer. J. Bot. 88:1568-1576.
-        Rice, 2006.
-            Towards an integrated undestanding of Bryophyte performance:
-            the dimensions of space and time.
-            Lindbergia 31:41-53.
-
-    Args:
-        wind_speed: [m s\ :sup:`-1`\ ]
-        roughness_height: [m]
-
-    Returns:
-        dictionary:
-            boundary layer conductances for
-                * 'co2': [mol m\ :sup:`-2` s\ :sup:`-1`\ ]
-                * 'h2o': [mol m\ :sup:`-2` s\ :sup:`-1`\ ]
-                * 'heat': [mol m\ :sup:`-2` s\ :sup:`-1`\ ]
-    NOTE:
-        Add here approximation for free convection;
-        in Campbell & Norman sect 7:
-
-        g_free['heat'] = 0.05 * [(Tsur - Tair) / d]**0.25,
-        where d [m] is characteristic dimension.
-        If assume moss stems as cylinders, d ~stem height.
-        g_free['h2o'] = 1.09 x g_free['heat'],
-        g_free['co2'] = 0.75 x g_free['co2']
-
-        The pain in the ass is the characteristic dimension which is hard
-        to define... for range of d and Tsur - Tair we get values that
-        may indicate uncertainty range... in any case these are comparable
-        to conductances due to forced convection (see fig)
-    """
-
-    schmidt_number_h2o = AIR_VISCOSITY / MOLECULAR_DIFFUSIVITY_H2O
-    reynolds_number = wind_speed * roughness_height / AIR_VISCOSITY
-
-    # Rice et al. (2001) eq. 1
-    conductance_h2o = (
-        AIR_DENSITY
-        * np.power(10, -3.18)
-        * np.power(reynolds_number, 1.61)
-        * MOLECULAR_DIFFUSIVITY_H2O
-        / roughness_height
-        * np.power(schmidt_number_h2o, 1.0/3.0))
-
-    # [mol m-2 s-1], differ from H2O by ratio of molecular diffusivities
-    conductance_co2 = (MOLECULAR_DIFFUSIVITY_CO2
-                       / MOLECULAR_DIFFUSIVITY_H2O
-                       * conductance_h2o)
-
-    conductance_heat = (THERMAL_DIFFUSIVITY_AIR
-                        / MOLECULAR_DIFFUSIVITY_H2O
-                        * conductance_h2o)
-
-    return {
-        'co2': conductance_co2,
-        'h2o': conductance_h2o,
-        'heat': conductance_heat
-        }
-
-
-def moss_atm_conductance(wind_speed, roughness_height, dT=0.0, atten_factor=0.25):
-    r""" Estimates boundary layer conductance of bryophyte canopy for paralell
-    forced and free convection.
-
-    Wind speed should represent vertical wind speed at ca. 20 cm above moss
-    canopy (parametrsization derived from wind-tunnel studies). Roughness
-    lengths scale is equal to the 'characteristic vertical height of
-    individual bryophyte shoots' (typically order of 3-10 mm).
-
-    Estimated CO\ :sub:`2` and heat conductances are related to water vapor
-    by the ratio of molecular diffusivities
-    (Campbell and Norman, 1998, eq. 7.29-7.33).
-
-    References:
-        Rice et al., 2001.
-            Significance of variation in bryophyte canopy structure.
-            Amer. J. Bot. 88:1568-1576.
-        Rice, 2006.
-            Towards an integrated undestanding of Bryophyte performance:
-            the dimensions of space and time.
-            Lindbergia 31:41-53.
-        Schuepp, 1980.
-            Observations on the use of analytical and numerical models for the
-            description of transfer to porous surface vegetation such as
-            lichen.
-            Boundary-Layer Meteorol. 29: 59-73.
-        Kondo & Ishida, 1997
-
-    Args:
-        wind_speed: [m s\ :sup:`-1`\ ]
-        roughness_height: [m]
-        deltaT: [degC], moss-air temperature difference
-        atten_factor: [-] dimensionless attenuation factor for continuous moss carpets
-
-    Returns:
-        dictionary:
-            boundary layer conductances for
-                * 'co2': [mol m\ :sup:`-2` s\ :sup:`-1`\ ]
-                * 'h2o': [mol m\ :sup:`-2` s\ :sup:`-1`\ ]
-                * 'heat': [mol m\ :sup:`-2` s\ :sup:`-1`\ ]
-
-    """
-
-    Sc_v = AIR_VISCOSITY / MOLECULAR_DIFFUSIVITY_H2O
-    Sc_c = AIR_VISCOSITY / MOLECULAR_DIFFUSIVITY_CO2
-    Pr = AIR_VISCOSITY / THERMAL_DIFFUSIVITY_AIR
-    Re = wind_speed * roughness_height / AIR_VISCOSITY
-
-
-    # Rice et al. (2001) eq. 1: ShSc**0.33 = CRe**n, where C=6.6e-4 and n=1.61.
-    # however, exponent n for individual species is <1.53 so use median values of model
-    # fitted to individual species.
-    C = 0.0067
-    n = 1.27
-
-    Sh_v = atten_factor * C*Re**n * Sc_v**0.33 # Sherwood numbner for H2O
-
-    conductance_h2o = Sh_v * MOLECULAR_DIFFUSIVITY_H2O / roughness_height # ms-1
-
-    # free convection as parallell pathway, based on Condo and Ishida, 1997.
-    b = 2.2e-3 #ms-1K-1 b=1.1e-3 for smooth, 3.3e-3 for rough surface
-    dT = np.maximum(dT, 0.0)
-    gfree = Sc_v / Pr * b * dT**0.33  # mol m-2 s-1
-
-    # [mol m-2 s-1]
-    conductance_h2o = (conductance_h2o + gfree) * AIR_DENSITY
-
-
-    # [mol m-2 s-1], differ from H2O by ratio of molecular diffusivities
-    conductance_co2 = Sc_c / Sc_v * conductance_h2o
-
-    conductance_heat = Pr / Sc_v * conductance_h2o
-
-    return {
-        'co2': conductance_co2,
-        'h2o': conductance_h2o,
-        'heat': conductance_heat
-        }
-
 def surface_atm_conductance(wind_speed, height, friction_velocity=None, dT=0.0, zom=0.01, b=1.1e-3):
     """
     Soil surface - atmosphere transfer conductance for scalars. Two paralell
@@ -1331,6 +1201,7 @@ def evaporation_through_organic_layer(volumetric_water,
     # [mol mol-1] -> [Pa]
     h2o = forcing['h2o'] * forcing['air_pressure']
     Ta = forcing['air_temperature']
+    Ts = forcing['soil_temperature']
     Pamb = forcing['air_pressure']
     afp = porosity - volumetric_water
 
@@ -1351,16 +1222,14 @@ def evaporation_through_organic_layer(volumetric_water,
                                               dT=temperature - Ta)
 
     # [mol m-2 s-1], two resistors in series
-    conductance_h2o = (
-        conductance_h2o * atm_conductance['h2o']
+    conductance_h2o = (conductance_h2o * atm_conductance['h2o']
         / (conductance_h2o + atm_conductance['h2o']))
 
     # Assuming soil rh = 1, calculate the maximum evaporation rate     # [mol/(m2 s)]
-
     # atmospheric evaporative demand
-    evaporative_demand = (conductance_h2o
-                          * (saturation_vapor_pressure(forcing['soil_temperature']) - h2o)
-                          / Ta)
+    evaporative_demand = max(0.0, conductance_h2o * 
+                                 (saturation_vapor_pressure(Ts) - h2o) / Pamb
+                            )
 
     #  soil supply
     # [- ]
@@ -1369,8 +1238,10 @@ def evaporation_through_organic_layer(volumetric_water,
     # [m], in equilibrium with atmospheric relative humidity
     atm_hydraulic_head = (GAS_CONSTANT * (Ta + DEG_TO_KELVIN) * np.log(rh_air)
                         / (MOLAR_MASS_H2O * GRAVITY))
+    
+    # E = -Kh * [(ha - hs) / zs + 1.0]
     evaporative_supply = max(0.0,
-        WATER_DENSITY / MOLAR_MASS_H2O * parameters['soil_hydraulic_conductivity']
+        - WATER_DENSITY / MOLAR_MASS_H2O * parameters['soil_hydraulic_conductivity']
         * ((atm_hydraulic_head - forcing['soil_water_potential']) / abs(parameters['soil_depth']) + 1.0))
 
     soil_evaporation =  min(evaporative_demand, evaporative_supply)
@@ -1608,30 +1479,130 @@ def hydraulic_conductivity(water_potential, water_retention, method=None):
 
         return saturated_conductivity * coefficient * (denominator / nominator)
 
+#%%
+""" alternative functions to estimate surface - air conductance for scalars
+    not used in code at the moment!
+"""
 
-#def emitted_longwave_radiation(temperature, properties=None):
-#    r""" Estimates emitted longwave radiation
-#
-#    Args:
-#        temperature (float): [W m\ :sup:`-2`]
-#        properties (dict/float): properties dictionary or emissivity
-#    Returns:
-#        (float): [W m\ :sup:`-2`]
-#    """
-#    if isinstance(properties, dict):
-#        emissivity = properties['optical_properties']['emissivity']
-#
-#    elif isinstance(properties, float):
-#        emissivity = properties
-#
-#    else:
-#        emissivity = 0.98
-#
-#    emitted_longwave_radiation = (
-#        emissivity * STEFAN_BOLTZMANN
-#        * np.power((temperature + DEG_TO_KELVIN), 4.0))
-#
-#    return emitted_longwave_radiation
+def moss_atm_conductance(wind_speed, roughness_height, dT=0.0, atten_factor=0.25):
+    r""" Estimates boundary layer conductance of bryophyte canopy for paralell
+    forced and free convection.
+
+    Wind speed should represent vertical wind speed at ca. 20 cm above moss
+    canopy (parametrsization derived from wind-tunnel studies). Roughness
+    lengths scale is equal to the 'characteristic vertical height of
+    individual bryophyte shoots' (typically order of 3-10 mm).
+
+    Estimated CO\ :sub:`2` and heat conductances are related to water vapor
+    by the ratio of molecular diffusivities
+    (Campbell and Norman, 1998, eq. 7.29-7.33).
+
+    References:
+        Rice et al., 2001.
+            Significance of variation in bryophyte canopy structure.
+            Amer. J. Bot. 88:1568-1576.
+        Rice, 2006.
+            Towards an integrated undestanding of Bryophyte performance:
+            the dimensions of space and time.
+            Lindbergia 31:41-53.
+        Schuepp, 1980.
+            Observations on the use of analytical and numerical models for the
+            description of transfer to porous surface vegetation such as
+            lichen.
+            Boundary-Layer Meteorol. 29: 59-73.
+        Kondo & Ishida, 1997
+
+    Args:
+        wind_speed: [m s\ :sup:`-1`\ ]
+        roughness_height: [m]
+        deltaT: [degC], moss-air temperature difference
+        atten_factor: [-] dimensionless attenuation factor for continuous moss carpets
+
+    Returns:
+        dictionary:
+            boundary layer conductances for
+                * 'co2': [mol m\ :sup:`-2` s\ :sup:`-1`\ ]
+                * 'h2o': [mol m\ :sup:`-2` s\ :sup:`-1`\ ]
+                * 'heat': [mol m\ :sup:`-2` s\ :sup:`-1`\ ]
+
+    """
+
+    Sc_v = AIR_VISCOSITY / MOLECULAR_DIFFUSIVITY_H2O
+    Sc_c = AIR_VISCOSITY / MOLECULAR_DIFFUSIVITY_CO2
+    Pr = AIR_VISCOSITY / THERMAL_DIFFUSIVITY_AIR
+    Re = wind_speed * roughness_height / AIR_VISCOSITY
+
+    # Rice et al. (2001) eq. 1 ShSc**0.33 = CRe**n, where C=6.6e-4 and n=1.61.
+    # C = 6.6e-4
+    # n = 1.61
+
+    #... however, exponent n for individual species is <1.53 so use median values of model
+    # fitted to individual species by SL.    
+    C = 0.0067
+    n = 1.27
+
+    Sh_v = atten_factor * C*Re**n * Sc_v**0.33 # Sherwood numbner for H2O
+
+    conductance_h2o = Sh_v * MOLECULAR_DIFFUSIVITY_H2O / roughness_height # ms-1
+
+    # free convection as paralel pathway, based on Condo and Ishida, 1997.
+    b = 2.2e-3 #ms-1K-1 b=1.1e-3 for smooth, 3.3e-3 for rough surface
+    dT = np.maximum(dT, 0.0)
+    gfree = Sc_v / Pr * b * dT**0.33  # mol m-2 s-1
+
+    # [mol m-2 s-1]
+    conductance_h2o = (conductance_h2o + gfree) * AIR_DENSITY
+
+
+    # [mol m-2 s-1], differ from H2O by ratio of molecular diffusivities
+    conductance_co2 = Sc_c / Sc_v * conductance_h2o
+
+    conductance_heat = Pr / Sc_v * conductance_h2o
+
+    return {
+        'co2': conductance_co2,
+        'h2o': conductance_h2o,
+        'heat': conductance_heat
+        }
+    
+def soil_boundary_layer_conductance(u, z, zo, Ta, dT, P=101300.):
+    """
+    Computes soil surface boundary layer conductance (mol m-2 s-1)
+    assuming velocity profile logarithmic between z and z0.
+    INPUT: u - mean velocity (m/s)
+           z - height of mean velocity u (m)
+           zo - soil surface roughness length for momentum (m)
+           Ta - ambient temperature (degC)
+           dT - soil surface-air temperature difference (degC)
+           P - pressure(Pa)
+    OUTPUT: boundary-layer conductances (mol m-2 s-1)
+        gb_h - heat (mol m-2 s-1)
+        gb_c- CO2 (mol m-2 s-1)
+        gb_v - H2O (mol m-2 s-1)
+    Based on Daamen & Simmons (1996). Note: gb decreases both in
+    unstable and stable conditions compared to near-neutral;
+    nonfeasible?
+    Samuli Launiainen, 18.3.2014
+    to python by Kersti
+    """
+
+    u = np.maximum(u, EPS)
+
+    rho_air = 44.6*(P / 101300.0)*(273.15 / (Ta + 273.13))  # molar density of air [mol/m3]
+
+    delta = 5.0 * GRAVITY * z * dT / ((Ta + 273.15) * u**2)
+    if delta > 0:
+        d = -0.75
+    else:
+        d = -2
+    rb = (np.log(z/zo))**2 / (0.4**2*u)*(1 + delta)**d
+
+    gb_h = rho_air * 1 / rb
+    gb_v = MOLECULAR_DIFFUSIVITY_H2O / THERMAL_DIFFUSIVITY_AIR * gb_h
+    gb_c = MOLECULAR_DIFFUSIVITY_CO2 / THERMAL_DIFFUSIVITY_AIR * gb_h
+
+    return gb_h, gb_c, gb_v
+
 
 
 #def bryophyte_shortwave_albedo(water_content, properties=None):
@@ -1709,59 +1680,3 @@ def hydraulic_conductivity(water_potential, water_retention, method=None):
 #        albedo_nir = scaling_coefficient * albedo_nir
 #
 #        return {'PAR': albedo_par, 'NIR': albedo_nir}
-
-
-
-#def capillary_rise(dt,
-#                   properties,
-#                   hydraulic_conductivity,
-#                   water_potential,
-#                   water_content,
-#                   soil_hydraulic_conductivity,
-#                   soil_water_potential,
-#                   soil_depth):
-#    r""" Estimates liquid water flux from soil to moss
-#    :math:`q = -k(\\frac{\partial h}{\partial z}+1)` [mm s\ :sup:`-1`] to moss
-#    as capillary rise from underlying soil. Capillary rise is further limited
-#    by bryophytes available water storage capacity.
-#
-#    For water flow in soil, multiply capillary_rise by bryophyte
-#    ground_coverage and add that to the root_sink.
-#
-#    Args:
-#        dt: [s]
-#        properties: dictionary containing characteristics of BryoType object
-#            * 'height'
-#            * 'max_water_content'
-#            * 'dry_mass'
-#        hydraulic_conductivity: [m s\ :sup:`-1`\ ]
-#        water_potential: [m]
-#        water_content: [g g\ :sup:`-1`\ ]
-#        soil_hydraulic_conductivity: [m s\ :sup:`-1`\ ]
-#            from 1st calculation node
-#        soil_water_potential: [m]
-#            from 1st calculation node
-#        soil_depth: [m]
-#
-#    Returns:
-#        float:
-#            capillary rise in [mm s\ :sup:`-1`\ ]
-#    """
-#
-#    # [m/s] geometric average of hydrological conductivities of
-#    # soil and bryophyte
-#    conductivities = hydraulic_conductivity * soil_hydraulic_conductivity
-#    k = np.power(conductivities, 0.5)
-#
-#    # [mm/s] or [kg/(m2 s)]
-#    capillary_rise = (1.0e3
-#                      * max(0.0,
-#                            - k * ((water_potential - soil_water_potential)
-#                                   / (properties['height'] - soil_depth) + 1.0)))
-#
-#    capillary_rise = min(
-#        capillary_rise,
-#        (properties['max_water_content'] - water_content)
-#        * properties['dry_mass'] / dt)
-#
-#    return capillary_rise

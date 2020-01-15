@@ -19,11 +19,8 @@ Tanaka, K., 2002. Multi-layer model of CO2 exchange in a plant community
 coupled with the water budget of leaf surfaces. Ecological Modelling, 147(1), pp.85-104.
 
 Last edit:
-SL 12.11.2019: removed correction factors for rain and snow. State of Prec
+Samuli Launiainen 12.11.2019: removed correction factors for rain and snow. State of Prec
 now computed based on T at highest gridpoint.
-
-SL 13.1.2020: changed units from [m] to [kg m-2] and [m s-1] to [kg m-2 s-1]
-
 """
 
 import numpy as np
@@ -41,11 +38,11 @@ class Interception(object):
         r""" Initializes interception object.
         Args:
             p (dict):
-                'wmax': maximum interception storage capacity for rain [kg water m-2 per unit of LAI]
-                'wmaxsnow': maximum interception storage capacity for snow [kg water m-2 per unit of LAI]
+                'wmax': maximum interception storage capacity for rain [m H2O per unit of LAI]
+                'wmaxsnow': maximum interception storage capacity for snow [m H2O per unit of LAI]
                 'Tmin': temperature below which all is snow [degC]
                 'Tmax': temperature above which all is water [degC]
-                'w_ini': initial canopy storage [kg water m-2(ground)]
+                'w_ini': initial canopy storage [m]
             LAIz (array): leaf area index per canopy layer [m\ :sup:`2`\ m\ :sup:`-2`\]
         Returns:
             self (object)
@@ -64,7 +61,7 @@ class Interception(object):
         # Leaf orientation factor with respect to incident Prec (horizontal leaves -> 1)
         self.leaf_orientation = p['leaf_orientation']
 
-        # initial state [kg m-2 s-1]
+        # initial state
         self.W = np.minimum(p['w_ini'], p['wmax'] * LAIz)
 
         self.update()
@@ -84,7 +81,7 @@ class Interception(object):
             forcing (dict):
                 'net_lw_leaf' (array): net radiation balance at each layer [W m\ :sup:`-2`\]
                 'sw_absorbed' (array): absorbed shortwave radiation at each layer [W m\ :sup:`-2`\]
-                'precipitation' (float): precipitation rate above canopy [kg  s\ :sup:`-1`\]
+                'precipitation' (float): precipitation rate above canopy [m s\ :sup:`-1`\]
                 'air_pressure' (float): ambient pressure [Pa]
                 'leaf_temperature' (array): average leaf temperature used in LW computation [degC]
                 'radiative_conductance' (array): radiative conductance [mol m-2 s-1]
@@ -98,21 +95,21 @@ class Interception(object):
                 'energy_balance': boolean
 
         Returns:
-            'throughfall' (float): total throughfall [kg m-2 s-1], multiply by WATER_DENSITY to get [kg m-2 s-1]
-            'throughfall_rain' (float): rain throughfall [kg m-2 s-1]
-            'throughfall_snow' (float): snow throughfall [kg m-2 s-1]
-            'interception' (float): [kg m-2 s-1]
-            'evaporation'(float): [kg m-2 s-1]
-            'condensation' (float): [kg m-2 s-1]
-            'condensation_drip' (float): [kg m-2 s-1]
-            'water_closure' (float): [kg m-2 s-1]
+            'throughfall' (float): total throughfall [m s-1], multiply by WATER_DENSITY to get [kg m-2 s-1]
+            'throughfall_rain' (float): rain throughfall [m s-1]
+            'throughfall_snow' (float): snow throughfall [m s-1]
+            'interception' (float): [m s-1]
+            'evaporation'(float): [m s-1]
+            'condensation' (float): [m s-1]
+            'condensation_drip' (float): [m s-1]
+            'water_closure' (float): [m s-1]
             'sources': {'h2o': dqsource,
                         'sensible_heat': Heat / dt,
                         'fr': Fr / dt,
                         'latent_heat': dqsource * L},
-            'evaporation_ml' (array): evaporation/condensation rate in layers [kg m-2 s-1]
-            'throughfall_ml' (array): throughfall rate in layers [kg m-2 s-1]
-            'condensation_drip_ml' (array): condensation drip rate in layers [kg m-2 s-1]
+            'evaporation_ml' (array): evaporation/condensation rate in layers [m s-1]
+            'throughfall_ml' (array): throughfall rate in layers [m s-1]
+            'condensation_drip_ml' (array): condensation drip rate in layers [m s-1]
 
         """
         lt = np.maximum(EPS, parameters['leaf_length'])
@@ -218,15 +215,15 @@ class Interception(object):
         Hw = SPECIFIC_HEAT_AIR * gb_h * (Tl_wet - T)
         # non-isothermal radiative flux [W m-2 (wet leaf)]
         Frw = SPECIFIC_HEAT_AIR * gr *(Tl_wet - Tl_ave)
-        # evaporation rate from wet leaf [kg m-2 s-1] (negative for condensation)
-        Ep = gb_v * Dleaf * MOLAR_MASS_H2O
+        # evaporation rate from wet leaf [m/s] (negative for condensation)
+        Ep = gb_v * Dleaf * MOLAR_MASS_H2O / WATER_DENSITY
 
         # Assume no evaporation during rain when energy balance not solved
         if Ebal == False and Prec > 0.0:
             Ep = np.zeros(N)
 
         # --- canopy water storage change ---
-        W = self.oldW.copy()  # layerwise canopy storage [kg m-2 s-1]
+        W = self.oldW.copy()  # layerwise canopy storage [m]
 
         # Unloading in canopy, ensures also that seasonal
         # LAI development does not mess up computations
@@ -235,31 +232,31 @@ class Interception(object):
             W[n] -= Unload  # update storage of layer n
             if n != 0:
                 W[n-1] += Unload  # unloading added to layer below (if not lower layer)
-        # Unload = unloading below canopy [kg m-2]
+        # Unload = unloading below canopy [m]
 
         # timestep subdivision to calculate change in canopy water store, no impact??
         Nsteps = 1  # number of subtimesteps
         subdt = dt / Nsteps  # [s]
 
         # initiate cumulative variables
-        Interc = np.zeros(N)  # interception [kg m-2]
-        Evap = np.zeros(N)  # evaporation [kg m-2]
-        Cond = np.zeros(N)  # condesation [kg m-2]
+        Interc = np.zeros(N)  # interception [m]
+        Evap = np.zeros(N)  # evaporation [m]
+        Cond = np.zeros(N)  # condesation [m]
         Heat = np.zeros(N)  # sensible heat flux [W m-2(ground)]
         Fr = np.zeros(N)  # sensible heat flux [W m-2(ground)]
         wf = np.zeros(N)  # wetness ratio
-        Tr = np.zeros(N)  # throughfall within canopy [kg m-2]
-        Trfall = 0.0  # throughfall below canopy [kg m-2]
+        Tr = np.zeros(N)  # throughfall within canopy [m]
+        Trfall = 0.0  # throughfall below canopy [m]
 
         if Prec > 0 or np.any(np.less(Ep, 0)) or np.any(np.greater(W, 0)):
             for t in range(Nsteps):
-                Ir = np.zeros(N)  # interception rate
+                Ir = np.zeros(N)  # interception rate [m/s]
                 dW = np.zeros(N)  # change in storage [m]
-                P = np.zeros(N+1)  # precipitation rate to layer
-                P[-1] = Prec  # above canopy equals precipitation rate 
+                P = np.zeros(N+1)  # precipitation rate to layer [m/s]
+                P[-1] = Prec  # above canopy equals precipitation rate [m/s]
                 for n in reversed(range(N)):  # start from highest grid point
                     if Ep[n] >= 0:  # evaporation case
-                        # change in storage
+                        # change in storage [m]
                         dW[n] = (F * P[n+1] / (F * P[n+1] + Ep[n] + eps) * Wmax[n] - W[n]) \
                                 * (1.0 - np.exp(-(F * P[n+1] + Ep[n]) * LAIz[n] * subdt / Wmax[n]))
                         # wetness ration in layer
@@ -267,14 +264,14 @@ class Interception(object):
                             wf[n] = (F * P[n+1] - dW[n] / (LAIz[n] * subdt)) / (F * P[n+1] + Ep[n])
                         else:
                             wf[n] = 0.0
-                        # interception rate in layer
+                        # interception rate in layer [m/s]
                         Ir[n] = F * (1 - wf[n]) * LAIz[n] * P[n+1]
-                        # drainage rate from layer
+                        # drainage rate from layer [m/s]
                         P[n] = P[n+1] - Ir[n]
-                        # evaporation from layer
+                        # evaporation from layer [m]
                         Evap[n] += wf[n] * LAIz[n] * Ep[n] * subdt
                     else:  # condensation case
-                        # change in storage
+                        # change in storage [m]
                         dW[n] = (Wmax[n] - W[n]) \
                                 * (1.0 - np.exp(-(F * P[n+1] - Ep[n]) * LAIz[n] * subdt / Wmax[n]))
                         # wetness ration in layer
@@ -282,22 +279,21 @@ class Interception(object):
                             wf[n] = (F * P[n+1] - Ep[n] - dW[n] / (LAIz[n] * subdt)) / (F * P[n+1] - Ep[n])
                         else:
                             wf[n] = 0.0
-                        # interception rate in layer
+                        # interception rate in layer [m/s]
                         Ir[n] = F * (1 - wf[n]) * LAIz[n] * P[n+1]
-                        # drainage rate from layer (incl. increase by condensation drip)
+                        # drainage rate from layer [m/s] (incl. increase by condensation drip)
                         P[n] = P[n+1] - Ir[n] - wf[n] * LAIz[n] * Ep[n]
-                        # Condensation (incl. condenstation to dry leaf and drip from wet leaf)
+                        # Condensation [m] (incl. condenstation to dry leaf and drip from wet leaf)
                         Cond[n] += LAIz[n] * Ep[n] * subdt
-                
-                # ! condensation to dry leaf part not accounted for in energy balance here but in dry leaf module
+                # ! condensation to dry leaf part not accounted for  in energy balance here but in dry leaf module
                 # Sensible heat flux [W m-2(ground)] * subdt
                 Heat += wf * LAIz * Hw * subdt
                 # radiative flux [W m-2(ground)] * subdt
                 Fr += wf * LAIz * Frw * subdt
 #                LE += wf * LAIz * Ep / MOLAR_MASS_H2O * WATER_DENSITY * L * subdt
-                # update storage
+                # update storage [m]
                 W += dW
-                # interception and throughfall
+                # interception and throughfall [m]
                 Interc += Ir * subdt
                 Trfall += P[0] * subdt
                 Tr += P[:-1] * subdt
@@ -308,7 +304,7 @@ class Interception(object):
         Trfall_snow = (1 - fW) * Trfall
 
         # H20 source/sink per ground area due to evaporation and condensation [mol m-2 s-1]
-        dqsource = (Evap + Cond) / dt / MOLAR_MASS_H2O
+        dqsource = (Evap + Cond) / dt / MOLAR_MASS_H2O * WATER_DENSITY
 
         if sum(W) < eps:
             W *= 0.0
@@ -322,10 +318,10 @@ class Interception(object):
         self.Tl_wet = Tl_wet
         self.df = df
 
-        # mass-balance error [kg m-2 s-1] ! self.W is old storage
+        # mass-balance error [m] ! self.W is old storage
         water_closure = sum(self.W) - sum(self.oldW) - (Prec * dt - sum(Evap) - sum(Cond) - (Trfall_rain + Trfall_snow))
 
-        fluxes = {
+        fluxes = {#'corrected_precipitation': Prec,
                   'throughfall': (Trfall_rain + Trfall_snow) / dt,
                   'throughfall_rain': Trfall_rain / dt,
                   'throughfall_snow': Trfall_snow / dt,
@@ -339,7 +335,7 @@ class Interception(object):
                               'fr': Fr / dt,
                               'latent_heat': dqsource * L},
                   'evaporation_ml': (Evap + Cond * (1 - wf)) / dt,
-                  'throughfall_ml': Tr / dt,
+                  'throughfall_ml': Tr / dt * WATER_DENSITY,
                   'condensation_drip_ml': (Cond * wf) / dt
                   }
         return fluxes

@@ -4,7 +4,7 @@
     :synopsis: APES-model component
 .. moduleauthor:: Kersti Haahti
 
-Model framework for 
+Model framework for Atmosphere-Plant Exchange Simulations
 
 Created on Tue Oct 02 09:04:05 2018
 
@@ -29,9 +29,10 @@ To call model and run single simulation and read results: see example in sandbox
     results = driver(create_ncf=False) # returns dict with integer keys
     results = results[0] # first simulation
 
+LAST EDIT: 15.1.2020 Samuli Launiainen
+    * new forestfloor and altered outputs
 Todo:
     
-    - make minimal running example (parameterization & example forcing file)
     - make minimal example of handling and plotting outputs using xarray -tools;
       now see tools.iotools.read_forcing for documentation! 
       
@@ -44,6 +45,7 @@ from copy import deepcopy as copy
 
 from tools.iotools import read_forcing, initialize_netcdf,  write_ncf
 from canopy.canopy import CanopyModel
+from canopy.constants import WATER_DENSITY
 from soil.soil import Soil
 
 from parameters.parametersets import iterate_parameters
@@ -135,6 +137,7 @@ def driver(create_ncf=False,
                 tasks[k].Nsoil_nodes,
                 tasks[k].Ncanopy_nodes,
                 tasks[k].Nplant_types,
+                tasks[k].Nground_types,
                 forcing,
                 filepath=gpara['results_directory'],
                 filename=filename)
@@ -169,7 +172,7 @@ class Model(object):
     Combines submodels 'CanopyModel' and 'Soil' and handles data-transfer
     between these model components and writing results.
         
-    Last edit: SL 17.11.2019
+    Last edit: SL 13.01.2020
     """
     def __init__(self,
                  gen_para,
@@ -203,13 +206,15 @@ class Model(object):
         self.canopy_model = CanopyModel(canopy_para, self.soil.grid['dz'])
 
         self.Nplant_types = len(self.canopy_model.planttypes)
+        self.Nground_types = len(self.canopy_model.forestfloor.bottomlayer_types)
 
         # initialize structure to save results
         self.results = _initialize_results(gen_para['variables'],
                                        self.Nsteps,
                                        self.Nsoil_nodes,
                                        self.Ncanopy_nodes,
-                                       self.Nplant_types)
+                                       self.Nplant_types,
+                                       self.Nground_types)
 
     def run(self):
         """
@@ -257,7 +262,7 @@ class Model(object):
                 'wind_speed': self.forcing['U'].iloc[k],            # [m s-1]
                 'friction_velocity': self.forcing['Ustar'].iloc[k], # [m s-1]
                 'air_temperature': self.forcing['Tair'].iloc[k],    # [deg C]
-                'precipitation': self.forcing['Prec'].iloc[k],      # [m s-1]
+                'precipitation': self.forcing['Prec'].iloc[k] * WATER_DENSITY, # [kg m-2 s-1]
                 'h2o': self.forcing['H2O'].iloc[k],                 # [mol mol-1]
                 'co2': self.forcing['CO2'].iloc[k],                 # [ppm]
                 'PAR': {'direct': self.forcing['dirPar'].iloc[k],   # [W m-2]
@@ -273,7 +278,7 @@ class Model(object):
                 'soil_water_potential': self.soil.water.h[self.canopy_model.ix_roots],  # [m] ?
                 'soil_volumetric_water': self.soil.heat.Wliq[self.canopy_model.ix_roots], # [m3 m-3]
                 'soil_volumetric_air': self.soil.heat.Wair[self.canopy_model.ix_roots],   # [m3 m-3]
-                'soil_pond_storage': self.soil.water.h_pond,                              # [m]  
+                'soil_pond_storage': self.soil.water.h_pond * WATER_DENSITY,    # [kg m-2]  
             }
 
             canopy_parameters = {
@@ -287,7 +292,7 @@ class Model(object):
             }
 
             # call self.canopy_model.run to solve above-ground part
-            outputs_canopy, ffloor_flux, ffloor_state, outputs_planttype = self.canopy_model.run(
+            out_canopy, out_planttype, out_ffloor, out_groundtype = self.canopy_model.run(
                 dt=self.dt,
                 forcing=canopy_forcing,
                 parameters=canopy_parameters
@@ -295,28 +300,29 @@ class Model(object):
 
             # --- Soil model  ---
             # compile forcing for Soil: potential infiltration and evaporation are at from ground surface
+            # water fluxes must be in [m s-1]
             soil_forcing = {
-                'potential_infiltration': ffloor_flux['potential_infiltration'],
-                'potential_evaporation': (ffloor_flux['evaporation_soil'] +
-                                          ffloor_flux['capillar_rise'] +
-                                          ffloor_flux['pond_recharge']),
+                'potential_infiltration': out_ffloor['throughfall'] / WATER_DENSITY,
+                'potential_evaporation': ((out_ffloor['soil_evaporation'] +
+                                          out_ffloor['capillary_rise'] +
+                                          out_ffloor['pond_recharge']) / WATER_DENSITY),
                 'atmospheric_pressure_head': -1.0E6,  # set to large value, because potential_evaporation already account for h_soil
-                'ground_heat_flux': -ffloor_flux['ground_heat'],
+                'ground_heat_flux': -out_ffloor['ground_heat'],
                 'date': self.forcing.index[k]}
 
             # call self.soil to solve below-ground water and heat flow
             soil_flux, soil_state = self.soil.run(
                     dt=self.dt,
                     forcing=soil_forcing,
-                    water_sink=outputs_canopy['root_sink'])
+                    water_sink=out_canopy['root_sink'])
 
-
+            
             # --- append results and copy of forcing to self.results
             forcing_output = {
                     'wind_speed': self.forcing['U'].iloc[k],
                     'friction_velocity': self.forcing['Ustar'].iloc[k],
                     'air_temperature': self.forcing['Tair'].iloc[k],
-                    'precipitation': self.forcing['Prec'].iloc[k],
+                    'precipitation': self.forcing['Prec'].iloc[k] * WATER_DENSITY, #NOTE! [kg m-2 s-1]
                     'h2o': self.forcing['H2O'].iloc[k],
                     'co2': self.forcing['CO2'].iloc[k],
                     'pressure': self.forcing['P'].iloc[k],
@@ -325,22 +331,26 @@ class Model(object):
                     'lw_in': self.forcing['LWin'].iloc[k]
                     }
                 
-            ffloor_state.update(ffloor_flux)
+
             soil_state.update(soil_flux)
 
             self.results = _append_results('forcing', k, forcing_output, self.results)
-            self.results = _append_results('canopy', k, outputs_canopy, self.results)
-            self.results = _append_results('ffloor', k, ffloor_state, self.results)
+            self.results = _append_results('canopy', k, out_canopy, self.results)
+            self.results = _append_results('ffloor', k, out_ffloor, self.results)
             self.results = _append_results('soil', k, soil_state, self.results)
-            self.results = _append_results('pt', k, outputs_planttype, self.results)
+            self.results = _append_results('pt', k, out_planttype, self.results)
+            self.results = _append_results('gt', k, out_groundtype, self.results)
 
         print('100%')
         
         ptnames = [pt.name for pt in self.canopy_model.planttypes]
-        ptnames.sort()
-
+        
         self.results = _append_results('canopy', None, {'z': self.canopy_model.z,
                                                         'planttypes': np.array(ptnames)}, self.results)
+
+        gtnames = [gt.name for gt in self.canopy_model.forestfloor.bottomlayer_types]
+
+        self.results = _append_results('ffloor', None, {'groundtypes': np.array(gtnames)}, self.results)
         
         self.results = _append_results('soil', None, {'z': self.soil.grid['z']}, self.results)
 
@@ -349,7 +359,7 @@ class Model(object):
         return self.results
 
 
-def _initialize_results(variables, Nstep, Nsoil_nodes, Ncanopy_nodes, Nplant_types):
+def _initialize_results(variables, Nstep, Nsoil_nodes, Ncanopy_nodes, Nplant_types, Nground_types):
     """
     Creates temporary results dictionary to accumulate simulation results
     SL 12.11.2019: removed if 'date' in dimensions and added option to save planttype profiles
@@ -373,7 +383,13 @@ def _initialize_results(variables, Nstep, Nsoil_nodes, Ncanopy_nodes, Nplant_typ
 
         elif 'planttype' in dimensions and 'canopy' not in dimensions:
             var_shape = [Nstep, Nplant_types]
-
+        
+        elif 'groundtype' in dimensions:
+            if 'date' not in dimensions:
+                var_shape = [Nground_types]
+            else:
+                var_shape = [Nstep, Nground_types]
+        
         else:
             var_shape = [Nstep]
         
@@ -394,10 +410,10 @@ def _append_results(group, step, step_results, results):
     for key in step_results_keys:
         variable = group + '_' + key
         if variable in results_keys:
-            if key == 'z' or key == 'planttypes':
+            if key == 'z' or key == 'planttypes' or key == 'groundtypes':
                 results[variable] = step_results[key]
-        
             else:
+                #print(variable, key, np.shape(results[variable][step]), np.shape(step_results[key]))
                 results[variable][step] = step_results[key]
 
     return results

@@ -6,7 +6,7 @@ GENERAL PARAMETERS FOR RUNNING pyAPES
 gpara = {
         'dt' : 1800.0,  # timestep in forcing data file [s]
         'start_time' : "2005-06-01",  # start time of simulation [yyyy-mm-dd]
-        'end_time' : "2005-06-05",  # end time of simulation [yyyy-mm-dd]
+        'end_time' : "2005-06-02",  # end time of simulation [yyyy-mm-dd]
         'forc_filename' : "Hyde_forcing_1997_2016.csv",  # forcing data file*
         'results_directory':'results/pyAPES/',
 
@@ -155,7 +155,7 @@ gpara = {
 
                       ['ffloor_evaporation', 'evaporation (forest floor) [kg m-2 s-1]', ('date', 'simulation')],                      
                       ['ffloor_soil_evaporation', 'evaporation (soil) [kg m-2 s-1]', ('date', 'simulation')],                      
-                      ['ffloor_potential_infiltration', 'potential infiltration (forest floor)) [kg m-2 s-1]', ('date', 'simulation')],
+                      ['ffloor_throughfall', 'throughfall, potential infiltration (forest floor)) [kg m-2 s-1]', ('date', 'simulation')],
                       ['ffloor_interception', 'interception rate (forest floor) [kg m-2 s-1]', ('date', 'simulation')],
                       ['ffloor_capillary_rise', 'capillary rise (forest floor) [kg m-2 s-1]', ('date', 'simulation')],
                       ['ffloor_pond_recharge', 'recharge from pond storage (forest floor) [kg m-2 s-1]', ('date', 'simulation')],                      
@@ -189,9 +189,11 @@ gpara = {
                       ['gt_water_closure', 'water balance error  [kg m-2 s-1]', ('date', 'simulation', 'groundtype')],
 
                       ['gt_net_co2', 'net co2 flux  [umol m-2 s-1]', ('date', 'simulation', 'groundtype')],
-                      ['gt_photosynthesis_rate', 'photosynthesis_rate [umol m-2 s-1]', ('date', 'simulation', 'groundtype')],
-                      ['gt_respiration_rate', 'respiration_rate [umol m-2 s-1]', ('date', 'simulation', 'groundtype')],
-
+                      ['gt_photosynthesis', 'photosynthesis_rate [umol m-2 s-1]', ('date', 'simulation', 'groundtype')],
+                      ['gt_respiration', 'respiration_rate [umol m-2 s-1]', ('date', 'simulation', 'groundtype')],
+                      ['gt_internal_co2', 'internal co2 mixing ratio [ppm]]', ('date', 'simulation', 'groundtype')],
+                      ['gt_conductance_co2', 'air-moss conductance for co2 [mol m-2 s-1]', ('date', 'simulation', 'groundtype')],
+                      
                       ['gt_temperature', 'temperature [degC]', ('date', 'simulation', 'groundtype')], 
                       ['gt_water_content', 'water content [g g-1]', ('date', 'simulation', 'groundtype')],                 
                       ['gt_volumetric_water', 'volumetric water content [m3 m-3]', ('date', 'simulation', 'groundtype')], 

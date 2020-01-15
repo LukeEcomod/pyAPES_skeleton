@@ -21,7 +21,9 @@ Note: roughness length z0 is [1/15 - 1/30] * x where x is height of element.
         There should be species specific 'effective roughness' (and also
         something that takes into account roughness of foresfloor)
 
-DEVELOPMENT VERSION OF SAMULI 9.1.2020
+Todo!
+    check interface definitions and return arguments (desciptions & units!)
+    SL 08.1.2020: Tämä on ihan kauhea viritys...
     
 Created on Tue Mar 13 11:59:23 2018
 """
@@ -36,8 +38,6 @@ from .litter import Litter
 from .carbon import soil_respiration
 from .heat_and_water import bryophyte_shortwave_albedo, emitted_longwave_radiation
 
-import logging
-logger = logging.getLogger(__name__)
 
 class ForestFloor(object):
     r"""Describes forest floor consisting of bryophytes, litter and/or baresoil.
@@ -71,9 +71,7 @@ class ForestFloor(object):
         Returns:
             self (object)
         """
-        
-        # -- forest floor or ground is tiled surface of baresoil, litter and bryophytes
-        # snowpack can overly ground
+
         self.snowpack = Snowpack(properties['snowpack'],
                                  properties['initial_conditions']['snowpack'])
 
@@ -249,6 +247,11 @@ class ForestFloor(object):
                 / abs(parameters['soil_depth'])
                 * (min(forcing['air_temperature'],0.0) - forcing['soil_temperature'][0])
             )
+#            fluxes['ground_heat'] += (
+#                0.01 * parameters['soil_thermal_conductivity']
+#                / abs(parameters['soil_depth'])
+#                * (forcing['air_temperature'] - forcing['soil_temperature'][0])
+#            )
 
             for bryo in self.bryotypes:
                 states['bryo_temperature'] = 0.0
@@ -257,42 +260,44 @@ class ForestFloor(object):
 
         else: # now snow, solve bryophytes & litter cover if present
             
-            # compile forcings and controls
-            bryo_forcing = {
-                'throughfall': fluxes_snow['potential_infiltration'] * WATER_DENSITY, # kg m-2 s-1
-                'h2o': forcing['h2o'],
-                'air_pressure': forcing['air_pressure'],
-                'par': forcing['par'],
-                'air_temperature': forcing['air_temperature'],
-                'wind_speed': forcing['wind_speed'],
-                'friction_velocity': forcing['friction_velocity'],
-                'soil_temperature': forcing['soil_temperature'][0],
-                'soil_pond_storage': forcing['soil_pond_storage'],
-                'soil_water_potential': forcing['soil_water_potential']
-            }
-
-            bryo_params = {
-                'soil_hydraulic_conductivity': parameters['soil_hydraulic_conductivity'],
-                'soil_thermal_conductivity': parameters['soil_thermal_conductivity'],
-                'soil_depth': parameters['soil_depth'],
-                'reference_height': parameters['reference_height'],
-            }
-
-            bryo_controls = {
-                'energy_balance': controls['energy_balance'],
-                'logger_info': controls['logger_info'],
-                'solver': 'forward_euler',
-                'nsteps': 20
-            }
-            
-            if controls['energy_balance']:
-                bryo_forcing.update({
-                    'lw_dn': forcing['lw_dn'],
-                    'nir': forcing['nir']
-                })
-                            
             # solve bryophytes
             if self.f_bryo > 0.0:
+                
+                # compile forcings and controls
+                bryo_forcing = {
+                    'throughfall': fluxes_snow['potential_infiltration'] * WATER_DENSITY, # kg m-2 s-1
+                    'h2o': forcing['h2o'],
+                    'air_pressure': forcing['air_pressure'],
+                    'par': forcing['par'],
+                    'air_temperature': forcing['air_temperature'],
+                    'wind_speed': forcing['wind_speed'],
+                    'friction_velocity': forcing['friction_velocity'],
+                    'soil_temperature': forcing['soil_temperature'][0],
+                    'soil_pond_storage': forcing['soil_pond_storage'],
+                    'soil_water_potential': forcing['soil_water_potential']
+                }
+
+                bryo_params = {
+                    'soil_hydraulic_conductivity': parameters['soil_hydraulic_conductivity'],
+                    'soil_thermal_conductivity': parameters['soil_thermal_conductivity'],
+                    'soil_depth': parameters['soil_depth'],
+                    'reference_height': parameters['reference_height'],
+                }
+
+                bryo_controls = {
+                    'energy_balance': controls['energy_balance'],
+                }
+
+                if controls['energy_balance']:
+                    bryo_forcing.update({
+                        'lw_dn': forcing['lw_dn'],
+                        'nir': forcing['nir']
+                    })
+
+                    bryo_controls.update({
+                        'nsteps': 20,
+                        'solver': 'forward_euler',
+                    })
                 
                 # loop bryotypes, aggregate fluxes and states
                 # SL 8.1. MUUTETAAN JOKO NIIN ETTÄ PALAUTTAA BRYOTYPE-KOHTAISET TULOKSET JA/TAI SITTEN PELKKÄ FORESTFLOOR-TASO;
@@ -346,12 +351,47 @@ class ForestFloor(object):
 
             if self.f_litter > 0.0:
 
+                litter_forcing = {
+                    'throughfall': fluxes_snow['potential_infiltration'],
+                    'h2o': forcing['h2o'],
+                    'air_pressure': forcing['air_pressure'],
+                    'par': forcing['par'],
+                    'air_temperature': forcing['air_temperature'],
+                    'wind_speed': forcing['wind_speed'],
+                    'friction_velocity': forcing['friction_velocity'],
+                    'soil_temperature': forcing['soil_temperature'][0],
+                    'soil_pond_storage': forcing['soil_pond_storage'],
+                    'soil_water_potential': forcing['soil_water_potential']
+                }
+
+                litter_params = {
+                    'soil_hydraulic_conductivity': 0.0, # sets capillary rise to litter to zero
+                    'soil_thermal_conductivity': parameters['soil_thermal_conductivity'],
+                    'soil_depth': parameters['soil_depth'],
+                    'reference_height': parameters['reference_height'],
+                }
+
+                litter_controls = {
+                    'energy_balance': controls['energy_balance'],
+                }
+
+                if controls['energy_balance']:
+                    litter_forcing.update({
+                        'lw_dn': forcing['lw_dn'],
+                        'nir': forcing['nir']
+                    })
+
+                    litter_controls.update({
+                        'nsteps': 20,
+                        'solver': 'forward_euler',
+                    })
+
                 # litters's heat, water and respiration
                 fluxes_litter, states_litter = self.litter.run(
                     dt=dt,
-                    forcing=bryo_forcing,
-                    parameters=bryo_params,
-                    controls=bryo_controls
+                    forcing=litter_forcing,
+                    parameters=litter_params,
+                    controls=litter_controls
                 )
                 
                 # mol m-2 (ground) s-1

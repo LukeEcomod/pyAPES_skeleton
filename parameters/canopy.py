@@ -58,7 +58,7 @@ interception = {'wmax': 0.2,  # maximum interception storage capacity for rain [
 
 z = np.linspace(0, grid['zmax'], grid['Nlayers'])  # grid [m] above ground
 
-pt1 = { 'name': 'tall_tree',                                         
+pt1 = { 'name': 'plant1',                                         
         'LAImax': 3.0, # maximum annual LAI m2m-2 
         'lad': lad_weibul(z, LAI=1.0, h=15.0, hb=3.0, species='pine'),  # leaf-area density m2m-3
         # cycle of photosynthetic activity
@@ -112,7 +112,7 @@ pt1 = { 'name': 'tall_tree',
         }
 
 
-pt2 = { 'name': 'small_tree',                                         
+pt2 = { 'name': 'plant2',                                         
         'LAImax': 1.0, # maximum annual LAI m2m-2 
         'lad': lad_weibul(z, LAI=1.0, h=5.0, hb=0.0, species='pine'),  # leaf-area density m2m-3
         # cycle of photosynthetic activity
