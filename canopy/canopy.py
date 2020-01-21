@@ -128,7 +128,7 @@ class CanopyModel(object):
         for pt in ptnames:
             ptypes.append(PlantType(self.z, cpara['planttypes'][pt], dz_soil, ctr=cpara['ctr'], loc=cpara['loc']))
         self.planttypes = ptypes
-        
+
         # --- stand characteristics: sum over planttypes---
 
         # total leaf area index [m2 m-2]
@@ -145,10 +145,10 @@ class CanopyModel(object):
         for pt in self.planttypes:
             rad[:len(pt.Roots.rad)] += pt.Roots.rad
             imax = max(imax, len(pt.Roots.rad))
-            
+
         self.ix_roots = np.array(range(imax)) # soil model layers corresponding to root zone
         self.rad = rad[self.ix_roots]
-        
+
         # total root area index [m2 m-2]
         self.RAI = sum([pt.Roots.RAI for pt in self.planttypes])
         # distribution of roots across soil model layers [-]
@@ -167,7 +167,7 @@ class CanopyModel(object):
         self.micromet = Micromet(self.z, self.lad, self.hc, cpara['micromet'])
 
         self.interception = Interception(cpara['interception'], self.lad * self.dz)
-        
+
         # forestfloor. Now soil respiration profile is as root_distr
         self.forestfloor = ForestFloor(cpara['forestfloor'],
                                        respiration_profile=self.root_distr)
@@ -215,7 +215,7 @@ class CanopyModel(object):
                 'zenith_angle': solar zenith angle [rad]
                 'PAR' (dict): with keys 'direct', 'diffuse' [Wm-2]
                 'NIR' (dict): with keys 'direct', 'diffuse' [Wm-2]
-                
+
                 'soil_temperature': [\ :math:`^{\circ}`\ C] properties of first soil node
                 'soil_water_potential': [m] properties of first soil node
                 'soil_volumetric_water': [m m\ :sup:`-3`\ ] properties of first soil node
@@ -242,7 +242,7 @@ class CanopyModel(object):
                 lad=self.lad,
                 hc=self.hc,
                 Utop=forcing['wind_speed'] / (forcing['friction_velocity'] + EPS))
-        
+
         # get U and ustar profiles [m s-1]
         U, ustar = self.micromet.update_state(ustaro=forcing['friction_velocity'])
 
@@ -283,7 +283,7 @@ class CanopyModel(object):
                 + radiation_profiles['par']['shaded']['absorbed'] * (1. - sunlit_fraction)
                 + radiation_profiles['nir']['shaded']['absorbed'] * (1. - sunlit_fraction)
             )
-        
+
         # --- start iterative solution of H2O, CO2, T, Tleaf and Tsurf ---
 
         max_err = 0.01  # maximum relative error
@@ -313,7 +313,7 @@ class CanopyModel(object):
 
             if self.Switch_Ebal:
                 # ---  LW profiles within canopy ---
-                
+
                 # emitted longwave from forest floor
                 lw_surf = self.forestfloor.emissivity * STEFAN_BOLTZMANN *\
                                 np.power(Tsurf + DEG_TO_KELVIN, 4)
@@ -327,8 +327,8 @@ class CanopyModel(object):
                     'LAIz': self.lad * self.dz,
                     'ff_emissivity': self.forestfloor.emissivity
                 }
-                
-                # solve LW profiles 
+
+                # solve LW profiles
                 radiation_profiles['lw'] = self.radiation.longwave_profiles(
                     forcing=lw_forcing,
                     parameters=lw_params
@@ -374,7 +374,7 @@ class CanopyModel(object):
                     'lw_radiative_conductance': radiation_profiles['lw']['radiative_conductance'],
                     'net_lw_leaf': radiation_profiles['lw']['net_leaf'],
                 })
-            
+
             # --- solve interception model
             wetleaf_fluxes = self.interception.run(
                 dt=dt,
@@ -394,44 +394,39 @@ class CanopyModel(object):
             Tleaf = self.interception.Tl_wet * (1 - df) * self.lad
 
             # --- dry leaf gas-exchange: solve for each planttype ---
+            forcing_pt = {
+                'h2o': H2O,
+                'co2': CO2,
+                'air_temperature': T,
+                'air_pressure': forcing['air_pressure'],
+                'wind_speed': U,
+                'par': radiation_profiles['par'],
+                'average_leaf_temperature': Tleaf_prev, # sl changed 25.11.
+            }
+
+            if self.Switch_Ebal:
+                forcing_pt.update({
+                    'nir': radiation_profiles['nir'],
+                    'lw': radiation_profiles['lw']
+                })
+
+            parameters_pt = {
+                'dry_leaf_fraction': self.interception.df,
+                'sunlit_fraction': sunlit_fraction
+            }
+
+            controls_pt = {
+                'energy_balance': self.Switch_Ebal,
+                'logger_info': 'date: {} iteration: {}'.format(
+                    parameters['date'],
+                    iter_no
+                )
+            }
+
             pt_stats = []
             pt_layerwise = []
+
             for pt in self.planttypes:
-
-                forcing_pt = {
-                    'h2o': H2O,
-                    'co2': CO2,
-                    'air_temperature': T,
-                    'air_pressure': forcing['air_pressure'],
-                    'wind_speed': U,
-                    'par': radiation_profiles['par'],
-                    'average_leaf_temperature': Tleaf_prev, # sl changed 25.11.
-                }
-
-                if self.Switch_Ebal:
-                    forcing_pt.update({
-                        'nir': radiation_profiles['nir'],
-                        'lw': radiation_profiles['lw']
-                    })
-
-                parameters_pt = {
-                    'dry_leaf_fraction': self.interception.df,
-                    'sunlit_fraction': sunlit_fraction
-                }
-
-                controls_pt = {
-                    'energy_balance': self.Switch_Ebal,
-                    'logger_info': 'date: {} iteration: {}'.format(
-                        parameters['date'],
-                        iter_no
-                    )
-                }
-
-                if self.Switch_Ebal:
-                    forcing_pt.update({
-                        'nir': radiation_profiles['nir'],
-                        'lw': radiation_profiles['lw'],
-                    })
 
                 # --- sunlit and shaded leaves gas-exchange and optional energy balance
                 pt_stats_i, layer_stats_i = pt.run(
@@ -446,26 +441,26 @@ class CanopyModel(object):
                 sources['sensible_heat'] += layer_stats_i['sensible_heat']
                 sources['latent_heat'] += layer_stats_i['latent_heat']
                 sources['fr'] += layer_stats_i['fr']
-                
+
                 # update canopy leaf temperature; it must be lad-weighted average
                 Tleaf += layer_stats_i['leaf_temperature'] * df * pt.lad
 
                 # append results
                 pt_stats.append(pt_stats_i)
-                
+
                 layer_stats_i['leaf_temperature'] *= pt.mask # set pt.lad=0 to np.NaN
-                pt_layerwise.append(layer_stats_i)            
+                pt_layerwise.append(layer_stats_i)
             del pt, pt_stats_i, layer_stats_i
-            
+
             # --- end of planttype -loop
-            
+
             # mean leaf temperature of canopy layer
             Tleaf = Tleaf / (self.lad + EPS)
 
             err_Tl = max(abs(Tleaf - Tleaf_prev))
 
             # --- solve forest floor water & heat balance & carbon exchange ---
-            
+
             # compile control and forcing dicts
             ff_controls = {
                 'energy_balance': self.Switch_Ebal,
@@ -506,7 +501,7 @@ class CanopyModel(object):
                     'nir': radiation_profiles['nir']['ground'],
                     'lw_dn': radiation_profiles['lw']['down'][0],
                 })
-            
+
             # --- solve forestfloor
             ff_fluxes, ff_states, gt_results = self.forestfloor.run(
                         dt=dt,
@@ -516,14 +511,14 @@ class CanopyModel(object):
                         )
             Tsurf = ff_states['temperature']
             err_Ts = abs(Tsurf_prev - Tsurf)
-            
+
             # --- compute scalar profiles (H2O, CO2, T) in canopy air-space
             if Switch_WMA is False:
                 # to recognize oscillation
                 if iter_no > 1:
                     T_prev2 = T_prev.copy()
                 T_prev = T.copy()
-                
+
                 # --- solve scalar profiles
                 H2O, CO2, T, err_h2o, err_co2, err_t = self.micromet.scalar_profiles(
                         gam, H2O, CO2, T, forcing['air_pressure'],
@@ -565,13 +560,13 @@ class CanopyModel(object):
                 err_h2o, err_co2, err_t = 0.0, 0.0, 0.0
 
         # --- end of iterative solution of timestep
-        
+
         # --- update state variables
         self.interception.update()
         self.forestfloor.update()
 
         # --- Compile outputs
-        
+
         # --- integrate to ecosystem fluxes (per m-2 ground) ---
         flux_co2 = (np.cumsum(sources['co2']) * self.dz + ff_fluxes['net_co2'])  # [umol m-2 s-1]
         flux_latent_heat = (np.cumsum(sources['latent_heat']) * self.dz + ff_fluxes['latent_heat'])  # [W m-2]
@@ -606,32 +601,32 @@ class CanopyModel(object):
                                    radiation_profiles['lw']['net_leaf']) * self.lad * self.dz) - (# absorbed radiation
                               sum(sources['sensible_heat'] * self.dz)  # sensible heat
                               + sum(sources['latent_heat'] * self.dz))  # latent heat
-        
+
         # return state and fluxes in dictionaries: to save into results, name convention and dimensions must
         # follow those in 'general parameters'
-        
+
         outputs_canopy = {
-                
+
                 # canopy state
                 'LAI': self.LAI, # m2m-2
                 'lad': self.lad, # m2 m-3
                 'IterWMA': iter_no,
                 'WMA_assumption': 1.0*Switch_WMA,
-                
+
                 # micromet profiles
                 'wind_speed': U,    # [m s-1]
                 'friction_velocity': ustar, # [m s-1]
                 'h2o': H2O, # [mol mol-1]
                 'co2': CO2, # [ppm]
                 'temperature': T, # [degC]
-                
+
                 # radiation profiles
                 'sunlit_fraction': sunlit_fraction, # [-]
                 'par_down': radiation_profiles['par']['down'], # [W m-2]
                 'par_up': radiation_profiles['par']['up'], # [W m-2]
-                'par_absorbed_sunlit': radiation_profiles['par']['sunlit']['absorbed'], #  [W m-2 (leaf)]                
+                'par_absorbed_sunlit': radiation_profiles['par']['sunlit']['absorbed'], #  [W m-2 (leaf)]
                 'par_absorbed_shaded': radiation_profiles['par']['shaded']['absorbed'],
-                
+
                 # total fluxes from interception model [kg m-2 s-1 = mm s-1], divide with WATER_DENSITY to get [kg m-2 s-1 = mm s-1]
                 'interception_storage': sum(self.interception.W),
                 'throughfall': wetleaf_fluxes['throughfall'],
@@ -640,12 +635,12 @@ class CanopyModel(object):
                 'condensation': wetleaf_fluxes['condensation'],
                 'condensation_drip': wetleaf_fluxes['condensation_drip'],
                 'water_closure': wetleaf_fluxes['water_closure'],
-                
+
                 # vertical profiles from interception model [kg m-2 s-1 = mm s-1]
                 'evaporation_ml': wetleaf_fluxes['evaporation_ml'],
                 'throughfall_ml': wetleaf_fluxes['throughfall_ml'],
                 'condensation_drip_ml': wetleaf_fluxes['condensation_drip_ml'],
-                
+
                 # ecosystem fluxes per m2 ground
                 'SH': flux_sensible_heat[-1], # W m-2
                 'LE': flux_latent_heat[-1], # Wm-2
@@ -653,12 +648,12 @@ class CanopyModel(object):
                 'GPP': GPP, # gross-primary productivity [umol m-2 s-1]
                 'Reco': Reco, # ecosystem respiration [umol m-2 s-1]
                 'transpiration': Tr, # transpiration of all planttypes [m s-1]
-                
+
                 # flux profiles
                 'co2_flux': flux_co2,  # [umol m-2 s-1]
                 'latent_heat_flux': flux_latent_heat,  # [W m-2]
                 'sensible_heat_flux': flux_sensible_heat,  # [W m-2]
-                
+
                 # root sink profile for Soil-model
                 'root_sink' : rootsink, # [m s-1]
                 }
@@ -668,15 +663,15 @@ class CanopyModel(object):
             Tleaf_sl = np.where(self.lad > 0.0, sum([k['leaf_temperature_sunlit'] for k in pt_layerwise]), np.nan)
             Tleaf_sh = np.where(self.lad > 0.0, sum([k['leaf_temperature_shaded'] for k in pt_layerwise]), np.nan)
             Tleaf_wet = np.where(self.lad > 0.0, self.interception.Tl_wet, np.nan)
-            
+
             outputs_canopy.update({
                     'Tleaf_wet': Tleaf_wet,
                     'Tleaf_sl': Tleaf_sl,
                     'Tleaf_sh': Tleaf_sh,
                     'Tleaf': np.where(self.lad > 0.0, Tleaf, np.nan)
                     })
-         
-            # net SW and LW radiation at uppermost layer. 
+
+            # net SW and LW radiation at uppermost layer.
             SWnet = (radiation_profiles['nir']['down'][-1] - radiation_profiles['nir']['up'][-1] +
                      radiation_profiles['par']['down'][-1] - radiation_profiles['par']['up'][-1])
             LWnet = (radiation_profiles['lw']['down'][-1] - radiation_profiles['lw']['up'][-1])
@@ -688,7 +683,7 @@ class CanopyModel(object):
                     'LWnet': LWnet, # W m-2 (ground)
                     'Rnet': SWnet + LWnet,
                     'fr_source': sum(sources['fr'] * self.dz),
-                    
+
                     # outputs from radiation-model
                     'leaf_net_SW': radiation_profiles['sw_absorbed'], # [Wm-2 leaf]
                     'leaf_net_LW': radiation_profiles['lw']['net_leaf'], # [Wm-2 leaf]
@@ -708,12 +703,12 @@ class CanopyModel(object):
                 'total_stomatal_conductance_h2o':  np.array([pt_st['stomatal_conductance'] for pt_st in pt_stats]),
                 'total_boundary_conductance_h2o':  np.array([pt_st['boundary_conductance'] for pt_st in pt_stats])
                 }
-        
+
         # add vertical profiles: convert list of dicts to dict of lists and append. Love Python!
         pt_profs = {}
         for k,v in pt_layerwise[0].items():
             pt_profs[k] = [x[k] for x in pt_layerwise]
-            
+
         pt_results.update(pt_profs)
         del pt_profs
 
@@ -733,7 +728,7 @@ class CanopyModel(object):
         Tleaf = T.copy() * self.lad / (self.lad + EPS)
         Tground = self.forestfloor.temperature
         self.interception.Tl_wet = T.copy()
-        
+
         for pt in self.planttypes:
             pt.Tl_sh = T.copy()
             pt.Tl_sl = T.copy()

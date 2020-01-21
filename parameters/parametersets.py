@@ -14,14 +14,14 @@ def get_parameters(scenario):
         parameters = {
                 'count': 1,
                 'general':{
-                        'start_time' : "2005-05-01",
-                        'end_time' : "2005-11-01"
+                        'start_time' : "2005-06-01",
+                        'end_time' : "2005-07-01"
                         },
                 'canopy': {
-                        'ctr': { # controls
-                            'WMA': True,  # well-mixed assumption
-                            'Ebal': False,  # no energy balance
-                                },
+                        # 'ctr': { # controls
+                        #     'WMA': True,  # well-mixed assumption
+                        #     'Ebal': False,  # no energy balance
+                        #         },
                         },
                 'soil': {
                     'water_model': {

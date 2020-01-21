@@ -15,7 +15,7 @@ Todo:
     - snowpack: energy balance and snowdepth changes with a process model
     - bare soil energy balance implementation
     - check organiclayer behaviour when EBAL = False --> water_exchange
-    
+
 Created on Tue Mar 13 11:59:23 2018
 """
 
@@ -33,11 +33,11 @@ class ForestFloor(object):
     """
 
     def __init__(self, para, respiration_profile=None):
-        r""" Initializes forestfloor object 
+        r""" Initializes forestfloor object
         Args
             para (dict):
              org_types (dict):
-                'name' (str) 
+                'name' (str)
                 'layer_type': 'bryophyte' or 'litter'
                 'coverage':  [-]
                 'height': [m]
@@ -56,12 +56,13 @@ class ForestFloor(object):
                     'saturated conductivity': [m s\ :sup:`-1`]
                     'pore connectivity': (l) [-]
                 'porosity': [m\ :sup:`3` m\ :sup:`-3`\ ]
-                'photosynthesis' (list):
-                    0. Amax [\ :math:`\mu`\ mol m\ :sup:`-1`\ :sub:`leaf` s\ :sup:`-1`]
-                    1. b [mol mol\ :sup:`-1`]
-                'respiration' (list):
-                    0. Q10 [-]
-                    1. R10 [\ :math:`\mu`\ mol m\ :sup:`-1`\ :sub:`leaf` s\ :sup:`-1`]
+                'photosynthesis' (dict): : only if layer_type == 'bryophyte'
+                    if farquhar-model as now:
+                        'Vcmax', 'Jmax', 'Rd', 'alpha', 'theta', 'beta',
+                        'gmax', 'wopt', 'a0', 'a1', 'CAP_desic', 'tresp'
+                'respiration' (dict): only if layer_type == 'litter'
+                    'q10' [-]
+                    'r10' [\ :math:`\mu`\ mol m\ :sup:`-1`\ :sub:`leaf` s\ :sup:`-1`]
                 'optical_properties' (dict):
                     'albedo_par': [-] photosynthetically active radiation (PAR)
                     'albedo_nir': [-] near infrared radiation (NIR)
@@ -73,18 +74,18 @@ class ForestFloor(object):
                 'retention': max fraction of liquid water in snow [-]
                 'Tmelt': temperature when melting starts [degC]
                 'optical_properties':
-                        'emissivity': 
+                        'emissivity':
                         'albedo_PAR':
                         'albedo_NIR':
                 'swe_initial': [kg m-2]
             soil_respiration (dict):
                     'r10': base respiration rate [umolm-2s-1]
                     'q10': temperature sensitivity [-]
-                    'moisture_coeff' (list): moisture response parameters 
+                    'moisture_coeff' (list): moisture response parameters
         Returns:
             self (object)
         """
-        
+
         # -- forest floor tiled surface of organic layers. snowpack can overly ground
         self.snowpack = DegreeDaySnow(para['snowpack'])
 
@@ -96,73 +97,61 @@ class ForestFloor(object):
         bltnames = list(para['bottom_layer_types'].keys())
         bltnames.sort()
 
-        f_organic = 0.0
-        ff_temperature = 0.0
-        ff_water_storage = 0.0
-        albedo = {'PAR': 0.0, 'NIR': 0.0}
-        emissivity = 0.0
-
         for bt in bltnames:
             if para['bottom_layer_types'][bt]['coverage'] > 0:
                 # case coverage > 0:
                 bltypes.append(OrganicLayer(para['bottom_layer_types'][bt]))
-                
-                f_organic += bltypes[-1].coverage
-                ff_temperature += bltypes[-1].coverage * bltypes[-1].temperature
-                ff_water_storage += bltypes[-1].coverage * bltypes[-1].water_storage
-                albedo['PAR'] += bltypes[-1].coverage * bltypes[-1].albedo['PAR']
-                albedo['NIR'] += bltypes[-1].coverage * bltypes[-1].albedo['NIR']
-                emissivity += bltypes[-1].coverage * bltypes[-1].emissivity
             else:
                 logger.info('Forestfloor: %s, coverage 0.0 omitted!', bt)
-        
+
+        f_organic = sum([bt.coverage for bt in bltypes])
         if abs(f_organic - 1.0) > EPS:
-            raise ValueError('The sum of organic type coverage must = 1. ' +
-                             'Now %.2f" % f_organic')
-        
+            raise ValueError('The sum of organic type coverage must = 1, ' +
+                             'now %.2f' % f_organic)
+
         self.bottomlayer_types = bltypes
-        del bltypes
-        
-        self.temperature = ff_temperature
-        self.water_storage = ff_water_storage
-        self.albedo = albedo
-        self.emissivity = emissivity
-        
-        if self.snowpack.swe > 0:
-            self.temperature = self.snowpack.temperature
-            self.albedo = self.snowpack.optical_properties['albedo']
-            self.emissivity = self.snowpack.optical_properties['emissivity']
-            
         logger.info('Forestfloor has %s bottomlayer types', len(self.bottomlayer_types))
-        
-    def update(self):
-        """ Updates forestfloor states
-        """
-        self.snowpack.update()
 
-        ff_temperature = 0.0
-        ff_water_storage = 0.0
-        albedo = {'PAR': 0.0, 'NIR': 0.0}
-        emissivity = 0.0        
-
-        for bt in self.bottomlayer_types:
-            bt.update_state()
-            
-            ff_temperature += bt.coverage * bt.temperature
-            ff_water_storage += bt.coverage * bt.water_storage
-            albedo['PAR'] += bt.coverage * bt.albedo['PAR']
-            albedo['NIR'] += bt.coverage * bt.albedo['NIR']
-            emissivity += bt.coverage * bt.emissivity
-        
         if self.snowpack.swe > 0:
             self.temperature = self.snowpack.temperature
             self.albedo = self.snowpack.optical_properties['albedo']
             self.emissivity = self.snowpack.optical_properties['emissivity']
         else:
-            self.temperature = ff_temperature
-            self.water_storage = ff_water_storage
-            self.albedo = albedo
-            self.emissivity = emissivity
+            self.temperature = sum([bt.coverage * bt.temperature
+                                    for bt in self.bottomlayer_types])
+            self.albedo = {'PAR': sum([bt.coverage * bt.albedo['PAR']
+                                       for bt in self.bottomlayer_types]),
+                           'NIR': sum([bt.coverage * bt.albedo['NIR']
+                                       for bt in self.bottomlayer_types])}
+            self.emissivity = sum([bt.coverage * bt.emissivity
+                                   for bt in self.bottomlayer_types])
+        self.water_storage = sum([bt.coverage * bt.water_storage
+                                  for bt in self.bottomlayer_types])
+
+
+    def update(self):
+        """ Updates forestfloor states
+        """
+        self.snowpack.update()
+
+        for bt in self.bottomlayer_types:
+            bt.update_state()
+
+        if self.snowpack.swe > 0:
+            self.temperature = self.snowpack.temperature
+            self.albedo = self.snowpack.optical_properties['albedo']
+            self.emissivity = self.snowpack.optical_properties['emissivity']
+        else:
+            self.temperature = sum([bt.coverage * bt.temperature
+                                    for bt in self.bottomlayer_types])
+            self.albedo['PAR'] = sum([bt.coverage * bt.albedo['PAR']
+                                      for bt in self.bottomlayer_types])
+            self.albedo['NIR'] = sum([bt.coverage * bt.albedo['NIR']
+                                      for bt in self.bottomlayer_types])
+            self.emissivity = sum([bt.coverage * bt.emissivity
+                                   for bt in self.bottomlayer_types])
+            self.water_storage = sum([bt.coverage * bt.water_storage
+                                      for bt in self.bottomlayer_types])
 
     def run(self, dt, forcing, parameters, controls):
         r"""Water and energy balance at the forestfloor; handles 'tiled' surfaces
@@ -177,7 +166,7 @@ class ForestFloor(object):
                 'nir': [W m\ :sup:`-2`\ ] if energy_balance is True
                 'lw_dn': [W m\ :sup:`-2`\ ] if energy_balance is True
                 'h2o': [mol mol\ :sup:`-1`\ ]
-                'co2': [ppm]    
+                'co2': [ppm]
                 'air_temperature': [\ :math:`^{\circ}`\ C]
                 'air_pressure': [Pa]
                 'soil_temperature': [\ :math:`^{\circ}`\ C]
@@ -200,24 +189,24 @@ class ForestFloor(object):
                 'latent_heat'
                 'ground_heat'
                 'energy_closure'
-                
+
                 'evaporation': tiles + soil below [kg m-2 s-1]
                 'soil_evaporation': from soil [kg m-2 s-1]
                 'throughfall'
                 'capillar_rise'
                 'pond_recharge'
                 'water_closure'
-                
+
                 'co2_flux' [umolm m-2 (ground) s-1]
                 'photosynthesis'
                 'respiration'
                 'soil_respiration' - from belowground
-                
+
             state (dict): forestfloor aggregated state
                 'temperature' [degC]
                 'water_storage' [kg m-2]
                 'snow_water_equivalent' [kg m-2]
-            
+
             blt_outputs (dict of lists): bottomlayer_type fluxes and state
                 'net_radiation' [W m\ :sup:`-2`\ ]
                 'latent_heat' [W m\ :sup:`-2`\ ]
@@ -227,11 +216,11 @@ class ForestFloor(object):
                 'water_closure' [kg m\ :sup:`-2`\ s\ :sup`-1`\]
                 'energy_closure' [W m\ :sup:`-2`\ ]
                 'evaporation' [kg m\ :sup:`-2`\ s\ :sup`-1`\]
-                'interception' [kg m\ :sup:`-2`\ s\ :sup`-1`\]            
+                'interception' [kg m\ :sup:`-2`\ s\ :sup`-1`\]
                 'pond_recharge' [kg m\ :sup:`-2`\ s\ :sup`-1`\]
                 'capillary_rise' [kg m\ :sup:`-2`\ s\ :sup`-1`\]
                 'throughfall' [kg m\ :sup:`-2`\ s\ :sup`-1`\]
-                
+
                 'temperature': [\ :math:`^{\circ}`\ C]
                 'volumetric_water': [m\ :sup:`3` m\ :sup:`-3`\ ]
                 'water_potential': [m]
@@ -249,13 +238,13 @@ class ForestFloor(object):
             'energy_closure': 0.0, # [W m-2]
 
             'evaporation': 0.0,  # [kg m-2 s-1]
-            'soil_evaporation': 0.0, # [kg m-2 s-1]            
+            'soil_evaporation': 0.0, # [kg m-2 s-1]
             'throughfall': 0.0,  # [kg m-2 s-1]
             'capillary_rise': 0.0,  # [kg m-2 s-1]
             'pond_recharge': 0.0, # [kg m-2 s-1]
             'water_closure': 0.0, # [kg m-2 s-1]
-            
-            'net_co2': 0.0, # [umol m-2(ground) s-1] 
+
+            'net_co2': 0.0, # [umol m-2(ground) s-1]
             'photosynthesis': 0.0,  # [umol m-2(ground) s-1]
             'respiration': 0.0,  # [umol m-2(ground) s-1]
             'soil_respiration': 0.0,  # [umol m-2(ground) s-1]
@@ -269,16 +258,13 @@ class ForestFloor(object):
             #'albedo': None,
             #'emissivity': None
          }
-        
-        # bottomlayer-type specific fluxes and state for output: list of dicts
-        bt_results = []
 
         # --- Soil respiration
         fluxes['soil_respiration'] = self.soilrespiration.respiration(
                                         forcing['soil_temperature'],
                                         forcing['soil_volumetric_water'],
                                         forcing['soil_volumetric_air'])
-        
+
         fluxes['respiration'] += fluxes['soil_respiration']
         fluxes['net_co2'] += fluxes['soil_respiration']
 
@@ -290,54 +276,57 @@ class ForestFloor(object):
         }
 
         fluxes_snow, states_snow = self.snowpack.run(dt=dt, forcing=snow_forcing)
-        
+
         # --- solve bottomlayer types and aggregate forest floor fluxes & state
 
         org_forcing = forcing.copy()
         del org_forcing['precipitation_rain'], org_forcing['precipitation_snow']
-        
+
         org_forcing.update(
                 {'precipitation': fluxes_snow['potential_infiltration'],
                 'soil_temperature': forcing['soil_temperature'][0],
                 'snow_water_equivalent': states_snow['snow_water_equivalent']}
                 )
 
+        # bottomlayer-type specific fluxes and state for output: list of dicts
+        bt_results = []
+
         for bt in self.bottomlayer_types:
             bt_flx, bt_state = bt.run(dt, org_forcing, parameters, controls)
-                            
+
             # effective forest floor fluxes and state
             for key in fluxes.keys():
                 if key in bt_flx.keys():
                     fluxes[key] += bt.coverage * bt_flx[key]
-            
+
             state['temperature'] += bt.coverage * bt_state['temperature']
             state['water_storage'] += bt.coverage * bt_state['water_storage']
-            
+
             # merge dicts and append to gt_results
             bt_flx.update(bt_state)
             bt_results.append(bt_flx)
             del bt_flx, bt_state
-            
+
         fluxes['evaporation'] += fluxes['soil_evaporation']
-    
-        if self.snowpack.swe > 0: 
-            fluxes['throughfall'] += fluxes_snow['potential_infiltration']
-            
+
+        if self.snowpack.swe > 0:
+            # fluxes['throughfall'] += fluxes_snow['potential_infiltration']  KH is already considered?
+
             # some groundheat flux to keep soil temperatures reasonable
             fluxes['ground_heat'] += (
                 parameters['soil_thermal_conductivity']
                 / abs(parameters['soil_depth'])
                 * (min(forcing['air_temperature'],0.0) - forcing['soil_temperature'][0])
             )
-            
+
             state['snow_water_equivalent'] = states_snow['snow_water_equivalent']
             state['temperature'] = states_snow['temperature']
-            
+
         # bottomlayer_type specific results (fluxes & state): convert list of dicts to dict of lists
         blt_outputs = {}
         for k,v in bt_results[0].items():
             blt_outputs[k] = [x[k] for x in bt_results]
-            
+
         return fluxes, state, blt_outputs
 
 # EOF

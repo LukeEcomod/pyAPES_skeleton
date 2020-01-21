@@ -42,9 +42,9 @@ class DegreeDaySnow(object):
         # max fraction of liquid water in snow [-]
         self.retention = properties['retention']
         self.Tmelt = properties['Tmelt']
-        
+
         self.optical_properties = properties['optical_properties']
-        
+
         # state variables:
         self.temperature = properties['initial_conditions']['temperature']
         self.swe = properties['initial_conditions']['snow_water_equivalent']  # [kg m-2]
@@ -53,12 +53,11 @@ class DegreeDaySnow(object):
 
         # temporary storage of iteration results
         self.iteration_state = None
-        
 
     def update(self):
         """ Updates new states to the snowpack.
         """
-        self.temperature = self.iteration_state['temperature']        
+        self.temperature = self.iteration_state['temperature']
         self.ice = self.iteration_state['ice']
         self.liq = self.iteration_state['liq']
         self.swe = self.iteration_state['swe']
@@ -98,10 +97,10 @@ class DegreeDaySnow(object):
 
         """ --- update state of snowpack and compute potential infiltration --- """
         ice = np.maximum(0.0,
-                             self.ice + forcing['precipitation_snow'] * dt + freeze - melt)
+                         self.ice + forcing['precipitation_snow'] * dt + freeze - melt)
 
         liq = np.maximum(0.0,
-                             self.liq + forcing['precipitation_rain'] * dt - freeze + melt)
+                         self.liq + forcing['precipitation_rain'] * dt - freeze + melt)
 
         pot_inf = np.maximum(0.0, liq - ice * self.retention)
 
@@ -114,13 +113,12 @@ class DegreeDaySnow(object):
         water_closure = ((swe - self.swe)
                          - (forcing['precipitation_rain'] * dt + forcing['precipitation_snow'] * dt - pot_inf))
 
-        
         # store iteration state
         self.iteration_state =  {'temperature': forcing['air_temperature'],
                                  'swe': swe,
                                  'ice': ice,
                                  'liq': liq}
-        
+
         fluxes = {'potential_infiltration': pot_inf / dt,
                   'water_closure': water_closure / dt
                  }

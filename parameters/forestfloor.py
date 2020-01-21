@@ -56,7 +56,7 @@ Litter = {
         'initial_conditions': {'temperature': 10.0,
                                'water_content': 4.0}
         }
-        
+
 Pleurozium = {
         'name': 'Pleurozium schreberi',  # (Brid.) Mitt.
         'layer_type': 'bryophyte',
@@ -180,7 +180,7 @@ forestfloor = {
         }
 
 #%% for empirical photosynthetic light-response - case
-        
+
 #Pleurozium = {
 #        'name': 'Pleurozium schreberi',  # (Brid.) Mitt.
 #        'layer_type': 'bryophyte',
@@ -255,8 +255,8 @@ forestfloor = {
 #            },
 #        'initial_conditions': {'temperature': 10.0,
 #                               'water_content': 10.0},
-#    }    
-    
+#    }
+
 #Sphagnum = {
 #        'name': 'Sphagnum fuscum',
 #        'layer_type': 'bryophyte',
