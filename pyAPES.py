@@ -24,7 +24,7 @@ To call model and run single simulation and read results: see example in sandbox
     # for NetCDF-outputs
     outputfile = driver(create_ncf=True, result_file='test.nc')
     results = read_results(outputfile) # opens NetCDF-file using xarray
-    
+
     # for returning results directly
     results = driver(create_ncf=False) # returns dict with integer keys
     results = results[0] # first simulation
@@ -32,10 +32,10 @@ To call model and run single simulation and read results: see example in sandbox
 LAST EDIT: 15.1.2020 Samuli Launiainen
     * new forestfloor and altered outputs
 Todo:
-    
+
     - make minimal example of handling and plotting outputs using xarray -tools;
-      now see tools.iotools.read_forcing for documentation! 
-      
+      now see tools.iotools.read_forcing for documentation!
+
 """
 
 import numpy as np
@@ -71,7 +71,7 @@ def driver(create_ncf=False,
     #mpl_logger.setLevel(logging.WARNING)
 
     # --- READ PARAMETERS ---
-    
+
     # Import general parameters
     from parameters.general import gpara
     # Import canopy model parameters
@@ -118,12 +118,12 @@ def driver(create_ncf=False,
 #    spara['heat_model']['initial_condition']['temperature'] = forcing['Tsoil'].iloc[0]
 #    spara['water_model']['initial_condition']['volumetric_water_content'] = forcing['Wliq'].iloc[0]
 
-    
+
     tasks = []
 
     for k in range(Nsim):
         tasks.append(Model(param_space[k]['general'], param_space[k]['canopy'], param_space[k]['soil'], forcing, nsim=k))
-    
+
     if create_ncf: # outputs to NetCDF-file, returns filename
         timestr = time.strftime('%Y%m%d%H%M')
         if result_file:
@@ -156,13 +156,13 @@ def driver(create_ncf=False,
         logger.info('Ready! Results are in: ' + output_file)
         ncf.close()
         return output_file
-    
+
     else: # returns dictionary of outputs
         running_time = time.time()
         results = {task.Nsim: task.run() for task in tasks}
-        
+
         logger.info('Running time %.2f seconds' % (time.time() - running_time))
-        
+
         return results #, Model # this would return also last Model instance
 
 
@@ -171,7 +171,7 @@ class Model(object):
     pyAPES - main model class.
     Combines submodels 'CanopyModel' and 'Soil' and handles data-transfer
     between these model components and writing results.
-        
+
     Last edit: SL 13.01.2020
     """
     def __init__(self,
@@ -219,8 +219,8 @@ class Model(object):
     def run(self):
         """
         Loops through self.forcing and appends to self.results.
-        
-        self.forcing variables and units; correspond to uppermost gridpoint:           
+
+        self.forcing variables and units; correspond to uppermost gridpoint:
             precipitation [m/s]
             air_pressure [Pa]
             air_temperature [degC]
@@ -230,9 +230,9 @@ class Model(object):
             co2 [ppm]
             zenith_angle [rad]
             lw_in: Downwelling long wave radiation [W/m2]
-            diffPar: Diffuse PAR [W/m2] 
+            diffPar: Diffuse PAR [W/m2]
             dirPar: Direct PAR [W/m2]
-            diffNir: Diffuse NIR [W/m2] 
+            diffNir: Diffuse NIR [W/m2]
             dirNir: Direct NIR [W/m2]
         """
 
@@ -251,12 +251,12 @@ class Model(object):
                 print('{0}..'.format(s), end=' ')
 
             # --- CanopyModel ---
-            # run daily loop: updates LAI, phenology and moisture stress ---         
+            # run daily loop: updates LAI, phenology and moisture stress ---
             if self.forcing['doy'].iloc[k] != self.forcing['doy'].iloc[k-1] or k == 0:
                 self.canopy_model.run_daily(
                         self.forcing['doy'].iloc[k],
                         self.forcing['Tdaily'].iloc[k])
-            
+
             # compile forcing dict for canopy model: soil_ refers to state of soil model
             canopy_forcing = {
                 'wind_speed': self.forcing['U'].iloc[k],            # [m s-1]
@@ -267,18 +267,18 @@ class Model(object):
                 'co2': self.forcing['CO2'].iloc[k],                 # [ppm]
                 'PAR': {'direct': self.forcing['dirPar'].iloc[k],   # [W m-2]
                         'diffuse': self.forcing['diffPar'].iloc[k]},
-                'NIR': {'direct': self.forcing['dirNir'].iloc[k],   # [W m-2]    
+                'NIR': {'direct': self.forcing['dirNir'].iloc[k],   # [W m-2]
                         'diffuse': self.forcing['diffNir'].iloc[k]},
                 'lw_in': self.forcing['LWin'].iloc[k],              # [W m-2]
                 'air_pressure': self.forcing['P'].iloc[k],          # [Pa]
                 'zenith_angle': self.forcing['Zen'].iloc[k],        # [rad]
-                
+
                 # from soil model
                 'soil_temperature': self.soil.heat.T[self.canopy_model.ix_roots],       # [deg C]
                 'soil_water_potential': self.soil.water.h[self.canopy_model.ix_roots],  # [m] ?
                 'soil_volumetric_water': self.soil.heat.Wliq[self.canopy_model.ix_roots], # [m3 m-3]
                 'soil_volumetric_air': self.soil.heat.Wair[self.canopy_model.ix_roots],   # [m3 m-3]
-                'soil_pond_storage': self.soil.water.h_pond * WATER_DENSITY,    # [kg m-2]  
+                'soil_pond_storage': self.soil.water.h_pond * WATER_DENSITY,    # [kg m-2]
             }
 
             canopy_parameters = {
@@ -314,9 +314,8 @@ class Model(object):
             soil_flux, soil_state = self.soil.run(
                     dt=self.dt,
                     forcing=soil_forcing,
-                    water_sink=out_canopy['root_sink'])
+                    water_sink=out_canopy['root_sink']*0.0)
 
-            
             # --- append results and copy of forcing to self.results
             forcing_output = {
                     'wind_speed': self.forcing['U'].iloc[k],
@@ -330,7 +329,7 @@ class Model(object):
                     'nir':  self.forcing['dirNir'].iloc[k] + self.forcing['diffNir'].iloc[k],
                     'lw_in': self.forcing['LWin'].iloc[k]
                     }
-                
+
 
             soil_state.update(soil_flux)
 
@@ -342,16 +341,16 @@ class Model(object):
             self.results = _append_results('gt', k, out_groundtype, self.results)
 
         print('100%')
-        
+
         ptnames = [pt.name for pt in self.canopy_model.planttypes]
-        
+
         self.results = _append_results('canopy', None, {'z': self.canopy_model.z,
                                                         'planttypes': np.array(ptnames)}, self.results)
 
         gtnames = [gt.name for gt in self.canopy_model.forestfloor.bottomlayer_types]
 
         self.results = _append_results('ffloor', None, {'groundtypes': np.array(gtnames)}, self.results)
-        
+
         self.results = _append_results('soil', None, {'z': self.soil.grid['z']}, self.results)
 
         logger.info('Finished simulation %.0f, running time %.2f seconds' % (self.Nsim, time.time() - time0))
@@ -374,7 +373,7 @@ def _initialize_results(variables, Nstep, Nsoil_nodes, Ncanopy_nodes, Nplant_typ
 
         if 'canopy' in dimensions:
             if 'planttype' in dimensions:
-                var_shape = [Nstep, Nplant_types, Ncanopy_nodes]            
+                var_shape = [Nstep, Nplant_types, Ncanopy_nodes]
             else:
                 var_shape = [Nstep, Ncanopy_nodes]
 
@@ -383,19 +382,19 @@ def _initialize_results(variables, Nstep, Nsoil_nodes, Ncanopy_nodes, Nplant_typ
 
         elif 'planttype' in dimensions and 'canopy' not in dimensions:
             var_shape = [Nstep, Nplant_types]
-        
+
         elif 'groundtype' in dimensions:
             if 'date' not in dimensions:
                 var_shape = [Nground_types]
             else:
                 var_shape = [Nstep, Nground_types]
-        
+
         else:
             var_shape = [Nstep]
-        
+
         results[var_name] = np.full(var_shape, np.NAN)
         # print(var_name, var_shape, dimensions)
- 
+
     return results
 
 

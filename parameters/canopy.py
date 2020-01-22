@@ -45,7 +45,7 @@ radiation = {'clump': 0.7,  # clumping index [-]
              'leaf_emi': 0.98
              }
 
-# --- interception --- 
+# --- interception ---
 interception = {'wmax': 0.2,  # maximum interception storage capacity for rain [kg m-2 per unit of LAI]  - Watanabe & Mizunani coniferous trees
                 'wmaxsnow': 0.8,  # maximum interception storage capacity for snow [kg m-2 per unit of LAI] - about 4 * wmax (Koivusalo & Kokkonen 2002)
                 'w_ini': 0.0,  # initial canopy storage [kg m-2]
@@ -58,8 +58,8 @@ interception = {'wmax': 0.2,  # maximum interception storage capacity for rain [
 
 z = np.linspace(0, grid['zmax'], grid['Nlayers'])  # grid [m] above ground
 
-pt1 = { 'name': 'plant1',                                         
-        'LAImax': 3.0, # maximum annual LAI m2m-2 
+pt1 = { 'name': 'plant1',
+        'LAImax': 3.0, # maximum annual LAI m2m-2
         'lad': lad_weibul(z, LAI=1.0, h=15.0, hb=3.0, species='pine'),  # leaf-area density m2m-3
         # cycle of photosynthetic activity
         'phenop': {
@@ -101,19 +101,19 @@ pt1 = { 'name': 'plant1',
         'leafp': {
             'lt': 0.02,     # leaf length scale m
             },
-        # root zone    
+        # root zone
         'rootp': {
             'root_depth': 0.5, # rooting depth [m]
             'beta': 0.943, # root distribution shape [-]
             'RAI_LAI_multiplier': 2.0, # fine-root to leaf-area ratio [-]
             'fine_radius': 2.0e-3, # [m]
-            'root_cond': 5.0e-8, # [s]
+            'root_cond': 5.0e8, # [s]
             }
         }
 
 
-pt2 = { 'name': 'plant2',                                         
-        'LAImax': 1.0, # maximum annual LAI m2m-2 
+pt2 = { 'name': 'plant2',
+        'LAImax': 1.0, # maximum annual LAI m2m-2
         'lad': lad_weibul(z, LAI=1.0, h=5.0, hb=0.0, species='pine'),  # leaf-area density m2m-3
         # cycle of photosynthetic activity
         'phenop': {
@@ -155,18 +155,18 @@ pt2 = { 'name': 'plant2',
         'leafp': {
             'lt': 0.02,     # leaf length scale m
             },
-        # root zone    
+        # root zone
         'rootp': {
             'root_depth': 0.5, # rooting depth [m]
             'beta': 0.943, # root distribution shape [-]
             'RAI_LAI_multiplier': 2.0, # fine-root to leaf-area ratio [-]
             'fine_radius': 2.0e-3, # [m]
-            'root_cond': 5.0e-8, # [s]
+            'root_cond': 5.0e8, # [s]
             }
         }
 
 # --- canopy-model parameter dictionary
-        
+
 cpara = {'loc': loc,
          'ctr': ctr,
          'grid': grid,

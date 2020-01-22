@@ -6,6 +6,8 @@ Created on Fri Oct 19 12:39:09 2018
 @author: ajkieloaho
 """
 
+from pyAPES_utilities.soiltypes.organic import soil_properties, zh
+
 ranges = {}
 
 def get_parameters(scenario):
@@ -23,16 +25,30 @@ def get_parameters(scenario):
                         #     'Ebal': False,  # no energy balance
                         #         },
                         },
-                'soil': {
+            'soil': {
+                    'grid': {
+                            'zh': zh
+                            },
+                    'soil_properties': soil_properties,
                     'water_model': {
-                            'solve': False,
-#                            'type': 'Equilibrium',
-                            },
-                    'heat_model':{
-                            'solve': False,
-                            },
-                        },
+                            # 'type': 'Equilibrium',
+                            'initial_condition':{
+                                    'ground_water_level': -0.2
+                                    },
+                            'lower_boundary': {  # lower boundary condition (type, value, depth)
+                                   'type': 'impermeable',
+                                   'value': None,
+                                   'depth': -2.0
+                                   },
+                           'drainage_equation': {  # drainage equation and drainage parameters
+                                   'type': 'Hooghoudt',  #
+                                   'depth': 0.8,  # drain depth [m]
+                                   'spacing': 45.0,  # drain spacing [m]
+                                   'width': 1.0,  # drain width [m]
+                                   }
+                            }
                     }
+            }
         return parameters
     else:
         raise ValueError("Unknown parameterset!")

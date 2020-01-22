@@ -10,7 +10,6 @@ from scipy.interpolate import interp1d
 from matplotlib import pyplot as plt
 eps = np.finfo(float).eps  # machine epsilon
 
-import seaborn as sns
 
 def fit_pF(head, watcont, fig=False, labels=None, percentage=False, kPa=False):
     """
@@ -19,8 +18,6 @@ def fit_pF(head, watcont, fig=False, labels=None, percentage=False, kPa=False):
 
     if fig:
         plt.figure()
-        colors = sns.color_palette("hls", len(watcont))
-        c = 0
     head = np.array(head)
     if kPa:
         head = head * 10  # kPa -> cm
@@ -48,9 +45,9 @@ def fit_pF(head, watcont, fig=False, labels=None, percentage=False, kPa=False):
 
         if fig:
 
-            plt.semilogy(Wcont[ix], head[ix], '.',color = colors[c])
+            plt.semilogy(Wcont[ix], head[ix], '.')
             xx = np.logspace(-1, 5.0, 100)
-            plt.semilogy(van_g(xx, *vgen), xx, '-',color = colors[c],
+            plt.semilogy(van_g(xx, *vgen), xx, '-',
                          label=label)
             c += 1
 
